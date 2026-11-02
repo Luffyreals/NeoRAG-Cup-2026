@@ -32,6 +32,7 @@ Repository này cung cấp bộ dữ liệu, pipeline baseline, bộ chấm chí
 | [Nộp bài trên aichallenge](docs/aichallenge.md) | Tạo tài khoản, đăng ký cuộc thi, nộp bài, đọc kết quả và xử lý lỗi trên hệ thống chấm |
 | [Đánh giá](docs/evaluation.md) | Định nghĩa các metric, công thức tính điểm và cách quy đổi theo baseline |
 | [Dữ liệu](data/README.md) | Mô tả corpus, bộ câu hỏi, nguồn và mức độ xác minh |
+| [Quy trình Git](docs/gitflow.md) | Mô hình nhánh `main` / `develop` / `feature/*` và quy ước commit |
 
 ## Lịch trình
 
