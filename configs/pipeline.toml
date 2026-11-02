@@ -1,0 +1,17 @@
+# Cấu hình cho neorag.pipelines.my_pipeline:MyPipeline.
+# Đổi file khác bằng biến môi trường NEORAG_PIPELINE_CONFIG=path/to/file.toml.
+# Mỗi thí nghiệm ghi lại thay đổi so với file này trong docs/experiments.md.
+
+[llm]
+model = "claude-haiku-5-5"  # model duy nhất được phép dùng trong cuộc thi
+cache_path = ".cache/pipeline.sqlite"
+
+[retrieval]
+method = "dense"  # dense (sẽ thêm: bm25, hybrid)
+embedding_backend = "gateway"  # gateway (bge-m3 qua gateway BTC) | local (sentence-transformers)
+embedding_model = "bge-m3"
+n_retrieved = 10  # số doc trả về để chấm retrieval (tối đa 10)
+
+[generation]
+prompt = "baseline"  # tên template trong neorag.pipelines.generation.PROMPTS
+top_k = 5  # số doc đưa vào prompt
