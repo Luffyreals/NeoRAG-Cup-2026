@@ -28,3 +28,9 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Claude Code / AI agents
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
