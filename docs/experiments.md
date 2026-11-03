@@ -34,8 +34,11 @@ Chạy ở chế độ chỉ retrieval (`[generation] enabled = false`), config 
 | exp05b | 03/11 | `dense_weight` = 1.5 | exp05 | 0.8627 | 0.7791 | 0.7639 | 0.9262 | 0.8019 | 9 / 9 |
 | **exp05b** | 03/11 | **`dense_weight` = 0.75** (chọn) | exp05 | 0.8654 | 0.8068 | 0.7808 | 0.9344 | **0.8177** | 15 / 4 |
 | exp05b | 03/11 | `dense_weight` = 0.5 | exp05 | 0.8709 | 0.7948 | 0.7739 | 0.9426 | 0.8132 | 17 / 11 |
+| exp05c | 03/11 | Chỉ rewrite câu không dấu (`only_unaccented`, accent_ratio < 0.2), `dense_weight` = 1.0 | exp05 | | | | | 0.8028 | 21 / 18 |
+| exp05c | 03/11 | Chỉ rewrite câu không dấu, `dense_weight` = 0.75 (không chọn) | exp05b 0.75 | 0.8572 | 0.7892 | 0.7655 | 0.9426 | 0.8040 | 14 / 19 |
 
 ## Ghi chú từng thí nghiệm
 
 - **exp00**: kiểm chứng refactor không đổi hành vi. Cache LLM và embedding trúng 100%, không tốn ngân sách.
 - **exp05b (trọng số RRF)**: giả thuyết ban đầu là BM25 yếu hơn dense nên cần tăng trọng số dense; kết quả ngược lại. Tăng dense (1.5, 2.0) không lợi hoặc tụt, các câu thua chủ yếu là câu gõ không dấu (`di lien hoan voi clb...`, `clb multimedia co phong rieng...`) — nơi kênh bỏ dấu của BM25 là tín hiệu mạnh nhất. Giảm dense xuống 0.75 tăng 0.0158 với 15 câu thắng / 4 câu thua; 0.5 bắt đầu tụt lại (so với 0.75: 6 thắng / 10 thua), nên chọn 0.75 và không dò mịn hơn để tránh overfit tập train. Cần kiểm tra lại sau khi thêm reranker (exp06), vì reranker chấm lại thứ tự top-20.
+- **exp05c (rewrite có điều kiện)**: phân tích exp04 → exp05 cho thấy rewrite chỉ có lợi với 26 câu không dấu (+0.145/câu) còn 96 câu có dấu thì ≈ 0 (18 thắng / 21 thua), nên thử chỉ viết lại câu không dấu để giảm latency. Với `dense_weight` = 1.0 đúng như dự đoán (+0.0009). Nhưng trên cấu hình tốt nhất (`dense_weight` = 0.75) lại tụt 0.0137: khi BM25 có trọng số lớn hơn, các câu con do rewrite tách ra (câu nhiều ý, so sánh nhiều CLB) giúp cả câu có dấu, ví dụ `mình muốn gửi mail hỏi cả 3 clb trong s2b...` (−0.68). Giữ rewrite cho mọi câu; tính năng vẫn còn trong config (mặc định tắt). Bài học: hai thay đổi tương tác với nhau, phải đo lại trên cấu hình mới nhất. Lưu ý: Public Test có 20/42 câu không dấu (train chỉ 26/126), nên rewrite càng quan trọng.
