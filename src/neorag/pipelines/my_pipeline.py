@@ -73,6 +73,7 @@ class RerankerConfig:
     batch_size: int = 16
     max_length: int = 512
     query: str = "rewrite"  # rewrite | original: câu đưa vào cross-encoder
+    num_threads: int = 0  # số luồng PyTorch trên CPU; 0 = mặc định của PyTorch
 
 
 @dataclass
@@ -135,7 +136,9 @@ def build_reranker(cfg: RerankerConfig):
         return None
     from neorag.pipelines.rerank import CrossEncoderReranker
 
-    return CrossEncoderReranker(cfg.model, cfg.top_n, cfg.batch_size, cfg.max_length)
+    return CrossEncoderReranker(
+        cfg.model, cfg.top_n, cfg.batch_size, cfg.max_length, cfg.num_threads
+    )
 
 
 class MyPipeline(RAGPipeline):

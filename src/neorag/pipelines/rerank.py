@@ -31,14 +31,22 @@ class CrossEncoderReranker:
         top_n: int = 20,
         batch_size: int = 16,
         max_length: int = 512,
+        num_threads: int = 0,
     ):
         self.model_name, self.top_n = model_name, top_n
         self.batch_size, self.max_length = batch_size, max_length
+        self.num_threads = num_threads
         self._lock = threading.Lock()  # bộ chấm gọi từ nhiều luồng
 
     def load(self):
         """Nạp model (tải về nếu chưa có). Gọi nhiều lần cũng chỉ nạp một lần."""
         with _load_lock:
+            if self.num_threads > 0:
+                # CPU lai P-core/E-core (ví dụ i7-12800H): mặc định PyTorch chia việc cho cả E-core
+                # chạy chậm hơn nên P-core phải chờ; ít luồng hơn lại nhanh hơn.
+                import torch
+
+                torch.set_num_threads(self.num_threads)
             return _load(self.model_name, self.max_length)
 
     @property
