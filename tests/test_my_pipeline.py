@@ -16,14 +16,23 @@ def make_pipeline(config=None, answer="Ngày 09/10/2011."):
     )
 
 
-def test_default_config_file_matches_baseline():
-    cfg = PipelineConfig.load(DEFAULT_CONFIG)
+def test_dataclass_defaults_match_baseline():
+    cfg = PipelineConfig()
     assert cfg.llm.model == "claude-haiku-5-5"
     assert cfg.retrieval.method == "dense"
     assert cfg.retrieval.embedding_model == "bge-m3"
     assert cfg.retrieval.n_retrieved == 10
+    assert not (cfg.rewrite.enabled or cfg.reranker.enabled or cfg.club_boost.enabled)
     assert cfg.generation.prompt == "baseline"
     assert cfg.generation.top_k == 5
+
+
+@pytest.mark.parametrize("name", ["pipeline.toml", "demo.toml"])
+def test_shipped_config_files_load(name):
+    cfg = PipelineConfig.load(DEFAULT_CONFIG.parent / name)
+    assert cfg.llm.model == "claude-haiku-5-5"  # luật cuộc thi: chỉ dùng model này
+    assert cfg.retrieval.method == "hybrid"
+    assert cfg.reranker.enabled and cfg.club_boost.enabled and cfg.generation.enabled
 
 
 def test_config_from_toml(tmp_path):
