@@ -14,10 +14,16 @@ from neorag.data import Document
 from neorag.llm import LLMClient
 from neorag.pipelines.base import RAGOutput, RAGPipeline
 from neorag.pipelines.baseline import GatewayEmbedder
+from neorag.pipelines.clubs import boost_clubs, detect_clubs
 from neorag.pipelines.generation import Generator
-from neorag.pipelines.retrieval import build_retriever
+from neorag.pipelines.retrieval import HybridRetriever, ScoredDoc, build_retriever, rrf_fuse
+from neorag.pipelines.rewrite import QueryRewriter
 
 DEFAULT_CONFIG = CONFIG_DIR / "pipeline.toml"
+# Câu trả lời khi generation.enabled = false: không gọi LLM sinh, chỉ đo retrieval.
+RETRIEVAL_ONLY_ANSWER = "(retrieval-only)"
+
+# Giá trị mặc định của các dataclass = hành vi baseline; configs/pipeline.toml bật các cải tiến.
 
 
 @dataclass
@@ -28,14 +34,51 @@ class LLMConfig:
 
 @dataclass
 class RetrievalConfig:
-    method: str = "dense"
+    method: str = "dense"  # dense | bm25 | hybrid
     embedding_backend: str = "gateway"  # gateway | local
     embedding_model: str = "bge-m3"
     n_retrieved: int = 10
+    depth: int = 30  # số doc mỗi retriever lấy trước khi gộp
+    rrf_k: int = 60
+    dense_weight: float = 1.0
+    bm25_weight: float = 1.0
+
+
+@dataclass
+class BM25Config:
+    tokenizer: str = "underthesea"  # underthesea | syllable
+    fold_accents: bool = True  # thêm âm tiết bỏ dấu để khớp câu hỏi không dấu
+    k1: float = 1.5
+    b: float = 0.75
+
+
+@dataclass
+class RewriteConfig:
+    enabled: bool = False
+    prompt: str = "v1"
+    max_queries: int = 4
+    original_weight: float = 1.0  # trọng số RRF của câu hỏi gốc; mỗi câu viết lại có trọng số 1
+
+
+@dataclass
+class RerankerConfig:
+    enabled: bool = False
+    model: str = "BAAI/bge-reranker-v2-m3"
+    top_n: int = 20  # số ứng viên đầu được chấm lại
+    batch_size: int = 16
+    max_length: int = 512
+    query: str = "rewrite"  # rewrite | original: câu đưa vào cross-encoder
+
+
+@dataclass
+class ClubBoostConfig:
+    enabled: bool = False
+    boost: float = 0.1  # cộng boost × (max − min điểm) cho doc đúng CLB
 
 
 @dataclass
 class GenerationConfig:
+    enabled: bool = True  # false: không sinh câu trả lời, chỉ đo retrieval (không tốn API)
     prompt: str = "baseline"
     top_k: int = 5
 
@@ -44,15 +87,26 @@ class GenerationConfig:
 class PipelineConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
+    bm25: BM25Config = field(default_factory=BM25Config)
+    rewrite: RewriteConfig = field(default_factory=RewriteConfig)
+    reranker: RerankerConfig = field(default_factory=RerankerConfig)
+    club_boost: ClubBoostConfig = field(default_factory=ClubBoostConfig)
     generation: GenerationConfig = field(default_factory=GenerationConfig)
 
     @classmethod
     def from_dict(cls, raw: dict) -> PipelineConfig:
-        return cls(
-            llm=LLMConfig(**raw.get("llm", {})),
-            retrieval=RetrievalConfig(**raw.get("retrieval", {})),
-            generation=GenerationConfig(**raw.get("generation", {})),
-        )
+        sections = {
+            "llm": LLMConfig,
+            "retrieval": RetrievalConfig,
+            "bm25": BM25Config,
+            "rewrite": RewriteConfig,
+            "reranker": RerankerConfig,
+            "club_boost": ClubBoostConfig,
+            "generation": GenerationConfig,
+        }
+        if unknown := set(raw) - set(sections):
+            raise TypeError(f"mục cấu hình không hợp lệ: {sorted(unknown)}")
+        return cls(**{name: kind(**raw.get(name, {})) for name, kind in sections.items()})
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> PipelineConfig:
@@ -71,33 +125,99 @@ def build_embedder(cfg: RetrievalConfig, llm: LLMClient):
     raise ValueError(f"retrieval.embedding_backend không hợp lệ: {cfg.embedding_backend!r}")
 
 
+def build_reranker(cfg: RerankerConfig):
+    if not cfg.enabled:
+        return None
+    from neorag.pipelines.rerank import CrossEncoderReranker
+
+    return CrossEncoderReranker(cfg.model, cfg.top_n, cfg.batch_size, cfg.max_length)
+
+
 class MyPipeline(RAGPipeline):
+    """Câu hỏi → (rewrite) → dense/BM25 cho từng câu → RRF → (rerank) → (ưu tiên CLB) → sinh."""
+
     def __init__(
         self,
         config: PipelineConfig | str | Path | None = None,
         llm: LLMClient | None = None,
         embedder=None,
+        reranker=None,
     ):
         if not isinstance(config, PipelineConfig):
             config = PipelineConfig.load(config)
+        if config.reranker.query not in ("rewrite", "original"):
+            raise ValueError(f"reranker.query không hợp lệ: {config.reranker.query!r}")
         self.config = config
         self.llm_model = config.llm.model
         self.llm = llm or LLMClient(cache_path=config.llm.cache_path)
         self.embedder = embedder or build_embedder(config.retrieval, self.llm)
-        self.retriever = build_retriever(config.retrieval.method, self.embedder)
+        r, bm25 = config.retrieval, config.bm25
+        self.retriever = build_retriever(
+            r.method,
+            self.embedder,
+            bm25={
+                "tokenizer": bm25.tokenizer,
+                "fold": bm25.fold_accents,
+                "k1": bm25.k1,
+                "b": bm25.b,
+            },
+            weights={"dense": r.dense_weight, "bm25": r.bm25_weight},
+            rrf_k=r.rrf_k,
+            depth=r.depth,
+        )
+        self.rewriter = None
+        if config.rewrite.enabled:
+            self.rewriter = QueryRewriter(
+                self.llm, self.llm_model, config.rewrite.prompt, config.rewrite.max_queries
+            )
+        self.reranker = reranker if reranker is not None else build_reranker(config.reranker)
         self.generator = Generator(
             self.llm, self.llm_model, config.generation.prompt, config.generation.top_k
         )
 
+    @property
+    def device(self) -> str | None:
+        """Thiết bị chạy model local (reranker hoặc embedder), None nếu chỉ dùng gateway."""
+        for model in (self.reranker, self.embedder):
+            if model is not None and hasattr(model, "device"):
+                return str(model.device)
+        return None
+
     def prepare(self) -> None:
-        if hasattr(self.embedder, "load"):
-            self.embedder.load()
+        for model in (self.embedder, self.reranker):
+            if model is not None and hasattr(model, "load"):
+                model.load()
 
     def index(self, corpus: list[Document]) -> None:
         self.retriever.index(corpus)
 
+    def _rankings(self, query: str) -> tuple[list[list[ScoredDoc]], list[float]]:
+        """Danh sách xếp hạng của từng retriever cho một câu hỏi, kèm trọng số RRF."""
+        if isinstance(self.retriever, HybridRetriever):
+            return self.retriever.rankings(query), self.retriever.weights
+        return [self.retriever.search(query, self.config.retrieval.depth)], [1.0]
+
+    def retrieve(self, query: str) -> list[ScoredDoc]:
+        cfg = self.config
+        rewrites = self.rewriter.rewrite(query) if self.rewriter else []
+        rankings, weights = [], []
+        for q, qw in [(query, cfg.rewrite.original_weight)] + [(q, 1.0) for q in rewrites]:
+            lists, ws = self._rankings(q)
+            rankings += lists
+            weights += [qw * w for w in ws]
+        hits = rrf_fuse(rankings, weights, cfg.retrieval.rrf_k)
+
+        if self.reranker is not None:
+            use_rewrite = cfg.reranker.query == "rewrite" and rewrites
+            hits = self.reranker.rerank(rewrites[0] if use_rewrite else query, hits)
+        if cfg.club_boost.enabled:
+            hits = boost_clubs(hits, detect_clubs(query, *rewrites), cfg.club_boost.boost)
+        return hits[: cfg.retrieval.n_retrieved]
+
     def run(self, query: str) -> RAGOutput:
-        hits = self.retriever.search(query, self.config.retrieval.n_retrieved)
-        docs = [h.doc for h in hits]
-        answer = self.generator.generate(query, docs)
+        docs = [h.doc for h in self.retrieve(query)]
+        if self.config.generation.enabled:
+            answer = self.generator.generate(query, docs)
+        else:
+            answer = RETRIEVAL_ONLY_ANSWER
         return RAGOutput(answer=answer, retrieved_ids=[d.id for d in docs])

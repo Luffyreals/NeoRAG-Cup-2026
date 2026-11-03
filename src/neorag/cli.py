@@ -108,8 +108,12 @@ def _cmd_predict(args: argparse.Namespace) -> int:
             s.detail = f"device: {embedder.device}"
         _check_gpu(embedder.device)
     else:
-        with step("Chuẩn bị pipeline"):
+        with step("Chuẩn bị pipeline") as s:
             pipeline.prepare()
+            if device := getattr(pipeline, "device", None):
+                s.detail = f"device: {device}"
+        if device:
+            _check_gpu(device)
 
     with step(f"Index {len(corpus)} passages"):
         pipeline.index(corpus)
