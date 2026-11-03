@@ -15,7 +15,9 @@ def fold_accents(text: str) -> str:
     """Bỏ dấu tiếng Việt: "Lập Trình" -> "Lap Trinh", "đ" -> "d"."""
     text = unicodedata.normalize("NFD", text)
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
-    return text.replace("đ", "d").replace("Đ", "D")
+    return text.replace("đ", "d").replace(
+        "Đ", "D"
+    )  # NFD không tách "đ" (nét gạch là một phần của chữ, không phải dấu phụ) nên phải đổi tay
 
 
 def syllables(text: str) -> list[str]:

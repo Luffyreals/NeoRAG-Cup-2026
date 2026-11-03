@@ -64,7 +64,7 @@ class BM25Retriever:
     def tokens(self, text: str) -> list[str]:
         return bm25_tokens(text, self.tokenizer, self.fold)
 
-    def index(self, corpus: list[Document]) -> None:
+    def index(self, corpus: list[Document]) -> None:  # chuẩn bị số liệu một lần cho cả corpus.
         self.docs = corpus
         self.term_freqs = [Counter(self.tokens(d.text)) for d in corpus]
         self.doc_lens = np.array([sum(tf.values()) for tf in self.term_freqs], dtype=np.float32)
@@ -73,7 +73,7 @@ class BM25Retriever:
         n = len(corpus)
         self.idf = {t: math.log(1 + (n - f + 0.5) / (f + 0.5)) for t, f in df.items()}
 
-    def scores(self, query: str) -> np.ndarray:
+    def scores(self, query: str) -> np.ndarray:  # chấm điểm một câu hỏi.
         scores = np.zeros(len(self.docs), dtype=np.float32)
         norm = self.k1 * (1 - self.b + self.b * self.doc_lens / max(self.avg_len, 1e-9))
         for term in set(self.tokens(query)):
@@ -96,7 +96,7 @@ def rrf_fuse(
     weights = weights or [1.0] * len(rankings)
     scores: dict[int, float] = {}
     docs: dict[int, Document] = {}
-    for ranking, w in zip(rankings, weights, strict=True):
+    for ranking, w in zip(rankings, weights, strict=True):  # cộng dồn điểm theo doc.id.
         for rank, hit in enumerate(ranking, start=1):
             scores[hit.doc.id] = scores.get(hit.doc.id, 0.0) + w / (k + rank)
             docs[hit.doc.id] = hit.doc
@@ -104,7 +104,7 @@ def rrf_fuse(
     return [ScoredDoc(docs[i], scores[i]) for i in order]
 
 
-class HybridRetriever:
+class HybridRetriever:  # cho mỗi retriever lấy depth = 30 doc rồi mới gộp.
     """Chạy nhiều retriever, mỗi cái lấy `depth` doc, rồi gộp bằng RRF có trọng số."""
 
     def __init__(
