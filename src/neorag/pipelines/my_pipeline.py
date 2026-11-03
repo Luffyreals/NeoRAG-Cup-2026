@@ -18,6 +18,7 @@ from neorag.pipelines.clubs import boost_clubs, detect_clubs
 from neorag.pipelines.generation import Generator
 from neorag.pipelines.retrieval import HybridRetriever, ScoredDoc, build_retriever, rrf_fuse
 from neorag.pipelines.rewrite import QueryRewriter
+from neorag.pipelines.vietnamese import accent_ratio
 
 DEFAULT_CONFIG = CONFIG_DIR / "pipeline.toml"
 # Câu trả lời khi generation.enabled = false: không gọi LLM sinh, chỉ đo retrieval.
@@ -58,6 +59,10 @@ class RewriteConfig:
     prompt: str = "v1"
     max_queries: int = 4
     original_weight: float = 1.0  # trọng số RRF của câu hỏi gốc; mỗi câu viết lại có trọng số 1
+    # Chỉ viết lại câu gõ không dấu (tỉ lệ âm tiết có dấu < accent_ratio): trên train, rewrite
+    # chỉ có lợi với nhóm này, còn câu có dấu thì không, mà lại tốn thêm một lần gọi LLM.
+    only_unaccented: bool = False
+    accent_ratio: float = 0.2
 
 
 @dataclass
@@ -197,9 +202,15 @@ class MyPipeline(RAGPipeline):
             return self.retriever.rankings(query), self.retriever.weights
         return [self.retriever.search(query, self.config.retrieval.depth)], [1.0]
 
+    def should_rewrite(self, query: str) -> bool:
+        if self.rewriter is None:
+            return False
+        cfg = self.config.rewrite
+        return not cfg.only_unaccented or accent_ratio(query) < cfg.accent_ratio
+
     def retrieve(self, query: str) -> list[ScoredDoc]:
         cfg = self.config
-        rewrites = self.rewriter.rewrite(query) if self.rewriter else []
+        rewrites = self.rewriter.rewrite(query) if self.should_rewrite(query) else []
         rankings, weights = [], []
         for q, qw in [(query, cfg.rewrite.original_weight)] + [(q, 1.0) for q in rewrites]:
             lists, ws = self._rankings(q)

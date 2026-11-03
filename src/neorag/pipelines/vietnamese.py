@@ -25,6 +25,18 @@ def syllables(text: str) -> list[str]:
     return _WORD.findall(normalize(text))
 
 
+def accent_ratio(text: str) -> float:
+    """Tỉ lệ âm tiết có dấu (0 nếu không có âm tiết): câu gõ không dấu cho giá trị gần 0.
+
+    Âm tiết toàn chữ không dấu sẵn ("clb", "ptit") cũng bị tính là không dấu, nên câu
+    tiếng Việt chuẩn thường có tỉ lệ khoảng 0.5-0.8 chứ không phải 1.
+    """
+    sylls = syllables(text)
+    if not sylls:
+        return 0.0
+    return sum(fold_accents(s) != s for s in sylls) / len(sylls)
+
+
 @lru_cache(maxsize=1)
 def _underthesea_tokenize():
     from underthesea import word_tokenize

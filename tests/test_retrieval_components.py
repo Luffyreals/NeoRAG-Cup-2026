@@ -13,7 +13,7 @@ from neorag.pipelines.retrieval import (
     rrf_fuse,
 )
 from neorag.pipelines.rewrite import QueryRewriter, parse_queries
-from neorag.pipelines.vietnamese import bm25_tokens, fold_accents, words
+from neorag.pipelines.vietnamese import accent_ratio, bm25_tokens, fold_accents, words
 
 
 @pytest.fixture
@@ -198,6 +198,27 @@ def test_rewrite_used_for_retrieval_but_original_for_generation(club_corpus):
     assert len(pipeline.llm.calls) == 2  # rewrite + sinh câu trả lời
     assert f"CÂU HỎI: {query}" in pipeline.llm.calls[1][0]["content"]
     assert pipeline.device == "cpu"
+
+
+def test_accent_ratio():
+    assert accent_ratio("clb lap trinh ptit thanh lap ngay nao") == 0.0
+    assert accent_ratio("CLB Lập Trình PTIT thành lập ngày nào?") > 0.5
+    assert accent_ratio("") == 0.0
+
+
+def test_only_unaccented_skips_rewrite_for_accented_query(corpus):
+    pipeline = make(
+        {
+            "rewrite": {"enabled": True, "only_unaccented": True},
+            "generation": {"enabled": False},
+        },
+        lambda m: "Câu viết lại",
+    )
+    pipeline.index(corpus)
+    pipeline.run("ProPTIT được thành lập ngày nào?")
+    assert pipeline.llm.calls == []  # câu có dấu: không gọi LLM
+    pipeline.run("proptit thanh lap ngay nao")
+    assert len(pipeline.llm.calls) == 1  # câu không dấu: viết lại
 
 
 def test_invalid_reranker_query_raises():
