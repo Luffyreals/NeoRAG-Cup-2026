@@ -29,7 +29,7 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Claude Code / AI agents
+# Cấu hình công cụ cá nhân (không commit)
 .claude/
 CLAUDE.md
 CLAUDE.local.md
