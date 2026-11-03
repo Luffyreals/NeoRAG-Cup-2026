@@ -12,6 +12,7 @@ enabled = true
 
 [reranker]
 enabled = true
+num_threads = 4  # chỉ ảnh hưởng tốc độ, không đổi điểm
 
 [club_boost]
 enabled = true
