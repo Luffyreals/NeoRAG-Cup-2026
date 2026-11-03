@@ -1,17 +1,43 @@
-# Cấu hình cho neorag.pipelines.my_pipeline:MyPipeline.
-# Đổi file khác bằng biến môi trường NEORAG_PIPELINE_CONFIG=path/to/file.toml.
-# Mỗi thí nghiệm ghi lại thay đổi so với file này trong docs/experiments.md.
+# Cấu hình cho neorag.pipelines.my_pipeline:MyPipeline, dùng để chạy benchmark (Public/Private Test).
+# Đổi file khác bằng biến môi trường NEORAG_PIPELINE_CONFIG=path/to/file.toml
+# (chatbot demo dùng configs/demo.toml: nhanh hơn, retrieval thấp hơn một chút).
+# Mục không ghi lấy giá trị mặc định trong my_pipeline.py (= baseline).
+# Mỗi lựa chọn dưới đây có số liệu trong docs/experiments.md (exp07 là cấu hình này).
 
 [llm]
 model = "claude-haiku-5-5"  # model duy nhất được phép dùng trong cuộc thi
 cache_path = ".cache/pipeline.sqlite"
 
 [retrieval]
-method = "dense"  # dense (sẽ thêm: bm25, hybrid)
-embedding_backend = "gateway"  # gateway (bge-m3 qua gateway BTC) | local (sentence-transformers)
+method = "hybrid"  # dense (bge-m3 qua gateway) + BM25, gộp bằng RRF (exp03)
+embedding_backend = "gateway"
 embedding_model = "bge-m3"
 n_retrieved = 10  # số doc trả về để chấm retrieval (tối đa 10)
+depth = 30  # mỗi retriever lấy 30 doc trước khi gộp
+rrf_k = 60
+dense_weight = 1.0  # 0.75 tốt hơn khi chưa có reranker (exp05b) nhưng không còn lợi khi có (exp06b)
+bm25_weight = 1.0
+
+[bm25]
+tokenizer = "underthesea"
+fold_accents = true  # kênh âm tiết bỏ dấu cho câu gõ không dấu (exp04)
+
+[rewrite]
+enabled = true  # Haiku thêm dấu, mở rộng viết tắt, tách câu nhiều ý (exp05)
+prompt = "v1"  # đổi prompt thì cache trượt: thêm v2 thay vì sửa v1
+max_queries = 4
+only_unaccented = false  # chỉ viết lại câu không dấu làm tụt điểm (exp05c)
+
+[reranker]
+enabled = true  # cross-encoder local BAAI/bge-reranker-v2-m3 (exp06)
+top_n = 20  # top-10 nhanh hơn nhưng retrieval −0.006 (exp06c)
+num_threads = 4  # i7-12800H: 4 luồng nhanh hơn mặc định 14; đo lại nếu đổi máy
+
+[club_boost]
+enabled = true  # ưu tiên mềm doc của CLB được nhắc trong câu hỏi (exp07)
+boost = 0.1
 
 [generation]
-prompt = "baseline"  # tên template trong neorag.pipelines.generation.PROMPTS
+enabled = true
+prompt = "baseline"  # tên template trong neorag.pipelines.generation.PROMPTS (Ngày 3 sẽ thay)
 top_k = 5  # số doc đưa vào prompt
