@@ -50,6 +50,17 @@ Chạy ở chế độ chỉ retrieval (`[generation] enabled = false`), config 
 - **exp06c (giảm latency reranker)**: đo riêng bước rerank: gần như toàn bộ latency (rewrite, dense, BM25 trúng cache chỉ 0.01–0.03 s). Máy i7-12800H (6 P-core + 8 E-core): PyTorch mặc định 14 luồng chậm hơn 4 luồng (top-20: ~6.4–11 s so với 6.2 s; top-10: 3.9 s), vì phần việc chia cho E-core làm P-core phải chờ. bf16 chậm gấp 10 lần (CPU không hỗ trợ bf16), `max_length` 256 vô ích (doc dài nhất 179 token). top-10 + 4 luồng: latency median 11 s → 4.2 s, retrieval −0.0062 (mất các câu có doc đúng ở hạng 11–20 sau hybrid, ví dụ train-0102, train-0120). Quyết định: hai cấu hình — benchmark dùng top-20 (điểm cao nhất, latency không tính vào điểm benchmark), chatbot demo dùng top-10 + 4 luồng. Số luồng tối ưu phụ thuộc máy, phải đo lại trên máy demo.
 - **exp07 (ưu tiên CLB)**: phân tích exp06 trước khi chạy: 29 câu sai doc hạng 1, chỉ 4 câu sai vì doc hạng 1 thuộc nhầm CLB (đều là câu hỏi về GCC/Multimedia nhưng doc ProPTIT lên đầu, do ProPTIT chiếm 78/118 doc); 6 câu có doc đúng ngoài CLB nhận diện được (có thể bị hại). Kết quả khớp dự đoán: 5 câu thắng (gồm cả 4 câu trên), 0 câu thua, +0.0172. Boost mềm không làm hại câu nào vì doc đúng ngoài CLB vẫn còn trong top-5. Cấu hình tốt nhất hiện tại.
 
+## Generation (Ngày 3)
+
+Retrieval giữ nguyên exp07 (0.8835). Chấm `--no-judge`: chỉ String Presence và ROUGE-L.
+
+| ID | Ngày | Thay đổi | So với | String Presence | ROUGE-L | BLEU-4 | Độ dài trả lời (trung vị / max) | Markdown |
+|---|---|---|---|---:|---:|---:|---:|---:|
+| exp07_gen | 04/11 | exp07 + prompt baseline | — | 0.8428 | 0.4796 | 0.3040 | 392 / 1245 ký tự | 113/126 câu |
+| **exp08** | 04/11 | **prompt v2**: 1-3 câu, không markdown, nguyên văn số liệu, từ chối một câu | exp07_gen | 0.8671 | **0.6316** | 0.4813 | 226 / 645 ký tự | 0 |
+
+- **exp08 (prompt v2)**: ROUGE-L +0.152, String Presence +0.024, câu trả lời ngắn gần bằng đáp án chuẩn (trung vị ~200 ký tự). 11/11 câu không có đáp án đều mở đầu "Tài liệu hiện có không có thông tin về ...". Có 6 câu String Presence giảm vì trả lời quá gọn nên bỏ mất ý phụ có trong key facts (train-0023 bỏ `mpc.proptit.com`, train-0028 bỏ `AICOVIDVN-115M`, train-0102 bỏ "bất lợi"). Latency median 9.7 s → 13.9 s dù câu trả lời ngắn hơn: cả hai lần đều gọi LLM thật (không trúng cache), nên nhiều khả năng do tải gateway lúc chạy chứ chưa kết luận được.
+
 ## Kết quả nộp Public Test
 
 | Lần | Ngày | Cấu hình | Score | Điểm xếp hạng (norm) | Ghi chú |
