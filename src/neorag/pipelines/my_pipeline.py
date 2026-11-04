@@ -74,6 +74,9 @@ class RerankerConfig:
     max_length: int = 512
     query: str = "rewrite"  # rewrite | original: câu đưa vào cross-encoder
     num_threads: int = 0  # số luồng PyTorch trên CPU; 0 = mặc định của PyTorch
+    # none: chấm bằng một câu (`query`); max | rrf: chấm với từng câu viết lại (câu đầy đủ +
+    # các câu hỏi con) rồi gộp điểm, để doc trả lời ý phụ của câu nhiều ý không bị đẩy xuống.
+    multi_query: str = "none"
 
 
 @dataclass
@@ -155,6 +158,8 @@ class MyPipeline(RAGPipeline):
             config = PipelineConfig.load(config)
         if config.reranker.query not in ("rewrite", "original"):
             raise ValueError(f"reranker.query không hợp lệ: {config.reranker.query!r}")
+        if config.reranker.multi_query not in ("none", "max", "rrf"):
+            raise ValueError(f"reranker.multi_query không hợp lệ: {config.reranker.multi_query!r}")
         self.config = config
         self.llm_model = config.llm.model
         self.llm = llm or LLMClient(cache_path=config.llm.cache_path)
@@ -223,7 +228,12 @@ class MyPipeline(RAGPipeline):
 
         if self.reranker is not None:
             use_rewrite = cfg.reranker.query == "rewrite" and rewrites
-            hits = self.reranker.rerank(rewrites[0] if use_rewrite else query, hits)
+            if cfg.reranker.multi_query != "none" and len(rewrites) > 1:
+                hits = self.reranker.rerank_multi(
+                    rewrites, hits, cfg.reranker.multi_query, cfg.retrieval.rrf_k
+                )
+            else:
+                hits = self.reranker.rerank(rewrites[0] if use_rewrite else query, hits)
         if cfg.club_boost.enabled:
             hits = boost_clubs(hits, detect_clubs(query, *rewrites), cfg.club_boost.boost)
         return hits[: cfg.retrieval.n_retrieved]
