@@ -1,0 +1,22 @@
+# Thí nghiệm tăng tốc reranker cho chatbot (Ngày 4). Cùng retrieval với configs/demo.toml.
+# Chạy: NEORAG_PIPELINE_CONFIG=configs/experiments/<file> neorag run train --no-judge --pipeline neorag.pipelines.my_pipeline:MyPipeline --out outputs/<tên>_pred.jsonl
+
+[retrieval]
+method = "hybrid"
+
+[bm25]
+fold_accents = true
+
+[rewrite]
+enabled = true
+
+[reranker]
+enabled = true
+top_n = 10
+num_threads = 4
+
+[club_boost]
+enabled = true
+
+[generation]
+enabled = false  # chỉ đo retrieval

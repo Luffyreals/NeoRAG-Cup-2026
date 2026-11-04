@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from neorag.data import Document
 from neorag.pipelines import baseline
 
@@ -73,3 +75,7 @@ class Generator:
 
     def generate(self, query: str, docs: list[Document]) -> str:
         return self.llm.chat(self.build_messages(query, docs), model=self.model)
+
+    def generate_stream(self, query: str, docs: list[Document]) -> Iterator[str]:
+        """Như `generate` nhưng trả từng đoạn chữ (cùng prompt, cùng cache)."""
+        return self.llm.chat_stream(self.build_messages(query, docs), model=self.model)

@@ -4,7 +4,7 @@ from conftest import FakeEmbedder, FakeLLM
 from neorag.data import Document
 from neorag.pipelines.clubs import GCC, MULTIMEDIA, PROPTIT, S2B, boost_clubs, detect_clubs
 from neorag.pipelines.my_pipeline import RETRIEVAL_ONLY_ANSWER, MyPipeline, PipelineConfig
-from neorag.pipelines.rerank import fuse_scores
+from neorag.pipelines.rerank import CrossEncoderReranker, fuse_scores
 from neorag.pipelines.retrieval import (
     BM25Retriever,
     DenseRetriever,
@@ -48,6 +48,10 @@ class FakeReranker:
 
     def rerank_multi(self, queries, hits, fusion="max", rrf_k=60):
         self.queries.append(tuple(queries))
+        return hits
+
+    def rerank_groups(self, groups, hits):
+        self.queries.append([(q, [h.doc.id for h in group]) for q, group in groups])
         return hits
 
 
@@ -266,3 +270,81 @@ def test_invalid_reranker_query_raises():
         make({"reranker": {"multi_query": "nope"}})
     with pytest.raises(TypeError):
         PipelineConfig.from_dict({"unknown_section": {}})
+
+
+def test_run_reports_step_timings(club_corpus):
+    reranker = FakeReranker()
+    pipeline = make(
+        {"rewrite": {"enabled": True}, "reranker": {"enabled": True}},
+        lambda m: "Câu viết lại",
+        reranker,
+    )
+    pipeline.index(club_corpus)
+    timings = {}
+    out = pipeline.run("gcc tuyen tv", timings=timings)
+    assert set(timings) == {"rewrite", "search", "rerank", "generate"}
+    assert all(t >= 0 for t in timings.values())
+    assert out.retrieved_ids == pipeline.run("gcc tuyen tv").retrieved_ids  # không đo vẫn chạy
+
+
+def test_run_stream_matches_run(club_corpus):
+    pipeline = make({"retrieval": {"method": "hybrid"}}, lambda m: "GCC tuyển thành viên khóa mới.")
+    pipeline.index(club_corpus)
+    out = pipeline.run("gcc tuyen tv")
+    timings = {}
+    ids, pieces = pipeline.run_stream("gcc tuyen tv", timings=timings)
+    assert ids == out.retrieved_ids
+    assert "generate" not in timings  # chưa đọc iterator thì chưa sinh
+    chunks = list(pieces)
+    assert len(chunks) > 1 and "".join(chunks) == out.answer
+    assert "generate" in timings
+    disabled = make({"generation": {"enabled": False}})
+    disabled.index(club_corpus)
+    assert list(disabled.run_stream("gcc")[1]) == [RETRIEVAL_ONLY_ANSWER]
+
+
+def test_sub_query_k_reranks_each_sub_query_with_own_candidates(club_corpus):
+    reranker = FakeReranker()
+    pipeline = make(
+        {
+            "retrieval": {"method": "hybrid"},
+            "bm25": {"tokenizer": "syllable"},
+            "rewrite": {"enabled": True},
+            "reranker": {"enabled": True, "multi_query": "max", "top_n": 3, "sub_query_k": 1},
+            "generation": {"enabled": False},
+        },
+        lambda m: "Cả ba CLB tuyển thành viên?\nGCC tuyển thành viên?\nS2B gồm những CLB nào?",
+        reranker,
+    )
+    pipeline.index(club_corpus)
+    pipeline.run("ca 3 clb tuyen tv")
+    groups = reranker.queries[-1]
+    assert [q for q, _ in groups] == [
+        "Cả ba CLB tuyển thành viên?",
+        "GCC tuyển thành viên?",
+        "S2B gồm những CLB nào?",
+    ]
+    assert len(groups[0][1]) == 3  # câu đầy đủ: top_n ứng viên sau khi gộp
+    assert groups[1][1] == [3] and groups[2][1] == [4]  # câu con: ứng viên tốt nhất của riêng nó
+    with pytest.raises(ValueError):
+        make({"reranker": {"multi_query": "rrf", "sub_query_k": 2}})
+
+
+def test_rerank_groups_takes_max_and_keeps_unscored_tail(club_corpus):
+    class FakeModel:
+        def __init__(self):
+            self.pairs = []
+
+        def predict(self, pairs, batch_size, show_progress_bar):
+            self.pairs += pairs
+            return [float(len(set(q.split()) & set(t.split()))) for q, t in pairs]
+
+    reranker = CrossEncoderReranker()
+    model = FakeModel()
+    reranker.load = lambda: model
+    hits = [ScoredDoc(d, 0.0) for d in club_corpus]
+    groups = [("GCC tuyển", hits[:2]), ("GCC tuyển thành viên", [hits[2], hits[0]])]
+    out = reranker.rerank_groups(groups, hits)
+    assert len(model.pairs) == 4  # mỗi câu chỉ chấm nhóm của nó
+    assert [h.doc.id for h in out] == [3, 1, 2, 4]  # doc 4 không thuộc nhóm nào: xếp cuối
+    assert out[1].score == 3.0  # doc 1: max(1 với câu đầu, 3 với câu sau)

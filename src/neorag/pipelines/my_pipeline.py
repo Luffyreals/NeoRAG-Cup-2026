@@ -6,6 +6,9 @@ Chạy: neorag run train --no-judge --pipeline neorag.pipelines.my_pipeline:MyPi
 from __future__ import annotations
 
 import os
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -25,6 +28,17 @@ DEFAULT_CONFIG = CONFIG_DIR / "pipeline.toml"
 RETRIEVAL_ONLY_ANSWER = "(retrieval-only)"
 
 # Giá trị mặc định của các dataclass = hành vi baseline; configs/pipeline.toml bật các cải tiến.
+
+
+@contextmanager
+def timed(timings: dict[str, float] | None, step: str):
+    """Cộng thời gian chạy (giây) của khối lệnh vào `timings[step]`; None thì không đo."""
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        if timings is not None:
+            timings[step] = timings.get(step, 0.0) + time.perf_counter() - start
 
 
 @dataclass
@@ -77,6 +91,10 @@ class RerankerConfig:
     # none: chấm bằng một câu (`query`); max | rrf | mix: chấm với từng câu viết lại (câu đầy đủ +
     # các câu hỏi con) rồi gộp điểm, để doc trả lời ý phụ của câu nhiều ý không bị đẩy xuống.
     multi_query: str = "none"
+    # > 0 (cần multi_query = "max"): câu viết lại đầy đủ chấm top_n ứng viên như cũ, còn mỗi câu hỏi
+    # con chỉ chấm sub_query_k ứng viên tốt nhất của riêng nó (exp13). 0 = mọi câu × top_n ứng viên.
+    sub_query_k: int = 0
+    quantize: bool = False  # int8 động trên CPU: nhanh hơn ~2 lần, điểm lệch nhẹ (exp12)
 
 
 @dataclass
@@ -140,7 +158,7 @@ def build_reranker(cfg: RerankerConfig):
     from neorag.pipelines.rerank import CrossEncoderReranker
 
     return CrossEncoderReranker(
-        cfg.model, cfg.top_n, cfg.batch_size, cfg.max_length, cfg.num_threads
+        cfg.model, cfg.top_n, cfg.batch_size, cfg.max_length, cfg.num_threads, cfg.quantize
     )
 
 
@@ -160,6 +178,8 @@ class MyPipeline(RAGPipeline):
             raise ValueError(f"reranker.query không hợp lệ: {config.reranker.query!r}")
         if config.reranker.multi_query not in ("none", "max", "rrf", "mix"):
             raise ValueError(f"reranker.multi_query không hợp lệ: {config.reranker.multi_query!r}")
+        if config.reranker.sub_query_k > 0 and config.reranker.multi_query != "max":
+            raise ValueError('reranker.sub_query_k cần reranker.multi_query = "max"')
         self.config = config
         self.llm_model = config.llm.model
         self.llm = llm or LLMClient(cache_path=config.llm.cache_path)
@@ -216,32 +236,63 @@ class MyPipeline(RAGPipeline):
         cfg = self.config.rewrite
         return not cfg.only_unaccented or accent_ratio(query) < cfg.accent_ratio
 
-    def retrieve(self, query: str) -> list[ScoredDoc]:
+    def retrieve(self, query: str, timings: dict[str, float] | None = None) -> list[ScoredDoc]:
+        """Truy xuất doc; truyền `timings` để nhận thời gian từng bước (chatbot hiển thị)."""
         cfg = self.config
-        rewrites = self.rewriter.rewrite(query) if self.should_rewrite(query) else []
-        rankings, weights = [], []
-        for q, qw in [(query, cfg.rewrite.original_weight)] + [(q, 1.0) for q in rewrites]:
-            lists, ws = self._rankings(q)
-            rankings += lists
-            weights += [qw * w for w in ws]
-        hits = rrf_fuse(rankings, weights, cfg.retrieval.rrf_k)
+        with timed(timings, "rewrite"):
+            rewrites = self.rewriter.rewrite(query) if self.should_rewrite(query) else []
+        with timed(timings, "search"):
+            rankings, weights = [], []
+            per_query = {}  # xếp hạng riêng của từng câu, cho rerank theo nhóm (sub_query_k)
+            for q, qw in [(query, cfg.rewrite.original_weight)] + [(q, 1.0) for q in rewrites]:
+                lists, ws = self._rankings(q)
+                rankings += lists
+                weights += [qw * w for w in ws]
+                per_query[q] = (lists, ws)
+            hits = rrf_fuse(rankings, weights, cfg.retrieval.rrf_k)
 
         if self.reranker is not None:
             use_rewrite = cfg.reranker.query == "rewrite" and rewrites
-            if cfg.reranker.multi_query != "none" and len(rewrites) > 1:
-                hits = self.reranker.rerank_multi(
-                    rewrites, hits, cfg.reranker.multi_query, cfg.retrieval.rrf_k
-                )
-            else:
-                hits = self.reranker.rerank(rewrites[0] if use_rewrite else query, hits)
+            with timed(timings, "rerank"):
+                if cfg.reranker.sub_query_k > 0 and len(rewrites) > 1:
+                    k = cfg.reranker.sub_query_k
+                    groups = [(rewrites[0], hits[: cfg.reranker.top_n])] + [
+                        (q, rrf_fuse(*per_query[q], cfg.retrieval.rrf_k)[:k]) for q in rewrites[1:]
+                    ]
+                    hits = self.reranker.rerank_groups(groups, hits)
+                elif cfg.reranker.multi_query != "none" and len(rewrites) > 1:
+                    hits = self.reranker.rerank_multi(
+                        rewrites, hits, cfg.reranker.multi_query, cfg.retrieval.rrf_k
+                    )
+                else:
+                    hits = self.reranker.rerank(rewrites[0] if use_rewrite else query, hits)
         if cfg.club_boost.enabled:
             hits = boost_clubs(hits, detect_clubs(query, *rewrites), cfg.club_boost.boost)
         return hits[: cfg.retrieval.n_retrieved]
 
-    def run(self, query: str) -> RAGOutput:
-        docs = [h.doc for h in self.retrieve(query)]
+    def run(self, query: str, timings: dict[str, float] | None = None) -> RAGOutput:
+        docs = [h.doc for h in self.retrieve(query, timings)]
         if self.config.generation.enabled:
-            answer = self.generator.generate(query, docs)
+            with timed(timings, "generate"):
+                answer = self.generator.generate(query, docs)
         else:
             answer = RETRIEVAL_ONLY_ANSWER
         return RAGOutput(answer=answer, retrieved_ids=[d.id for d in docs])
+
+    def run_stream(
+        self, query: str, timings: dict[str, float] | None = None
+    ) -> tuple[list[int], Iterator[str]]:
+        """Cho chatbot: truy xuất xong mới trả về, còn câu trả lời là iterator sinh dần từng đoạn.
+
+        `timings["generate"]` chỉ có sau khi đọc hết iterator.
+        """
+        docs = [h.doc for h in self.retrieve(query, timings)]
+        ids = [d.id for d in docs]
+        if not self.config.generation.enabled:
+            return ids, iter([RETRIEVAL_ONLY_ANSWER])
+
+        def pieces() -> Iterator[str]:
+            with timed(timings, "generate"):
+                yield from self.generator.generate_stream(query, docs)
+
+        return ids, pieces()
