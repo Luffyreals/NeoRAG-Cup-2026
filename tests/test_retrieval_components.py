@@ -4,6 +4,7 @@ from conftest import FakeEmbedder, FakeLLM
 from neorag.data import Document
 from neorag.pipelines.clubs import GCC, MULTIMEDIA, PROPTIT, S2B, boost_clubs, detect_clubs
 from neorag.pipelines.my_pipeline import RETRIEVAL_ONLY_ANSWER, MyPipeline, PipelineConfig
+from neorag.pipelines.rerank import fuse_scores
 from neorag.pipelines.retrieval import (
     BM25Retriever,
     DenseRetriever,
@@ -44,6 +45,10 @@ class FakeReranker:
         q = set(query.lower().split())
         scored = [ScoredDoc(h.doc, len(q & set(h.doc.text.lower().split()))) for h in hits]
         return sorted(scored, key=lambda h: -h.score)
+
+    def rerank_multi(self, queries, hits, fusion="max", rrf_k=60):
+        self.queries.append(tuple(queries))
+        return hits
 
 
 # ---------------------------------------------------------------- tiếng Việt
@@ -221,8 +226,43 @@ def test_only_unaccented_skips_rewrite_for_accented_query(corpus):
     assert len(pipeline.llm.calls) == 1  # câu không dấu: viết lại
 
 
+def test_fuse_scores_max_and_rrf():
+    # doc 0 khớp ý 1, doc 1 khớp ý 2, doc 2 khớp vừa cả hai
+    matrix = [[0.9, 0.1, 0.5], [0.1, 0.8, 0.6]]
+    assert fuse_scores(matrix, "max") == [0.9, 0.8, 0.6]
+    rrf = fuse_scores(matrix, "rrf", rrf_k=0)
+    assert rrf[2] == pytest.approx(1 / 2 + 1 / 2)  # hạng 2 ở cả hai câu
+    assert rrf[0] == pytest.approx(1 / 1 + 1 / 3)
+    assert fuse_scores(matrix, "mix") == pytest.approx([0.5, 0.45, 0.55])
+    for fusion in ("max", "mix"):
+        assert fuse_scores([[0.3, 0.7]], fusion) == [0.3, 0.7]  # một câu: giữ nguyên
+    with pytest.raises(ValueError):
+        fuse_scores(matrix, "nope")
+
+
+def test_multi_query_rerank_uses_all_rewrites(corpus):
+    reranker = FakeReranker()
+    pipeline = make(
+        {
+            "rewrite": {"enabled": True},
+            "reranker": {"enabled": True, "multi_query": "max"},
+            "generation": {"enabled": False},
+        },
+        lambda m: "Câu đầy đủ?\nÝ một?\nÝ hai?",
+        reranker,
+    )
+    pipeline.index(corpus)
+    pipeline.run("cau hoi nhieu y")
+    assert reranker.queries == [("Câu đầy đủ?", "Ý một?", "Ý hai?")]
+    pipeline.llm.responder = lambda m: "Câu một ý?"
+    pipeline.run("cau hoi mot y")
+    assert reranker.queries[-1] == "Câu một ý?"  # chỉ một câu: rerank thường
+
+
 def test_invalid_reranker_query_raises():
     with pytest.raises(ValueError):
         make({"reranker": {"query": "nope"}})
+    with pytest.raises(ValueError):
+        make({"reranker": {"multi_query": "nope"}})
     with pytest.raises(TypeError):
         PipelineConfig.from_dict({"unknown_section": {}})

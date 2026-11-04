@@ -24,6 +24,30 @@ def _load(model_name: str, max_length: int):
     )
 
 
+def fuse_scores(matrix: list[list[float]], fusion: str = "max", rrf_k: int = 60) -> list[float]:
+    """Gộp điểm cross-encoder `matrix[câu hỏi][doc]` thành một điểm cho mỗi doc.
+
+    max: điểm cao nhất qua các câu hỏi (doc chỉ cần khớp tốt một ý).
+    rrf: cộng 1/(k + hạng) của doc trong xếp hạng theo từng câu hỏi.
+    mix: ½ điểm theo câu đầu (câu đầy đủ) + ½ điểm cao nhất theo các câu còn lại (câu hỏi con),
+    để một câu con khớp mạnh doc khác không một mình đẩy doc đúng của câu một ý xuống.
+    """
+    if fusion == "max":
+        return [max(col) for col in zip(*matrix, strict=True)]
+    if fusion == "mix":
+        if len(matrix) == 1:
+            return list(matrix[0])
+        return [0.5 * col[0] + 0.5 * max(col[1:]) for col in zip(*matrix, strict=True)]
+    if fusion == "rrf":
+        fused = [0.0] * len(matrix[0])
+        for row in matrix:
+            order = sorted(range(len(row)), key=lambda i: -row[i])
+            for rank, i in enumerate(order, start=1):
+                fused[i] += 1.0 / (rrf_k + rank)
+        return fused
+    raise ValueError(f"reranker.multi_query không hợp lệ: {fusion!r}")
+
+
 class CrossEncoderReranker:
     def __init__(
         self,
@@ -55,18 +79,27 @@ class CrossEncoderReranker:
 
     def rerank(self, query: str, hits: list[ScoredDoc]) -> list[ScoredDoc]:
         """Chấm lại `top_n` ứng viên đầu; phần còn lại giữ nguyên thứ tự, xếp sau."""
+        return self.rerank_multi([query], hits)
+
+    def rerank_multi(
+        self, queries: list[str], hits: list[ScoredDoc], fusion: str = "max", rrf_k: int = 60
+    ) -> list[ScoredDoc]:
+        """Như `rerank` nhưng chấm ứng viên với từng câu hỏi con rồi gộp điểm (`fuse_scores`).
+
+        Câu nhiều ý: chấm bằng một câu duy nhất thì doc trả lời ý phụ dễ rơi khỏi top-5.
+        """
         head, tail = hits[: self.top_n], hits[self.top_n :]
-        if not head:
+        if not head or not queries:
             return hits
         model = self.load()
+        pairs = [(q, h.doc.text) for q in queries for h in head]
         with self._lock:
-            scores = model.predict(
-                [(query, h.doc.text) for h in head],
-                batch_size=self.batch_size,
-                show_progress_bar=False,
-            )
+            flat = model.predict(pairs, batch_size=self.batch_size, show_progress_bar=False)
+        n = len(head)
+        matrix = [[float(s) for s in flat[i * n : (i + 1) * n]] for i in range(len(queries))]
+        scores = fuse_scores(matrix, fusion, rrf_k)
         reranked = sorted(
-            (ScoredDoc(h.doc, float(s)) for h, s in zip(head, scores, strict=True)),
+            (ScoredDoc(h.doc, s) for h, s in zip(head, scores, strict=True)),
             key=lambda h: -h.score,
         )
         floor = reranked[-1].score
