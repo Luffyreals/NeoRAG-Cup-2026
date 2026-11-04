@@ -69,3 +69,12 @@ Retrieval giữ nguyên exp07 (0.8835). Chấm `--no-judge`: chỉ String Presen
 | baseline | — | `BaselinePipeline` (số BTC công bố) | 52.40 | 0 | Ngưỡng = 53.40 |
 | #1 (33066) | 04/11 | `configs/pipeline.toml` = exp07 + generation prompt baseline | 77.99 | 64.56 | Retrieval đã tối ưu, generation chưa. Từ norm suy ra điểm cao nhất bảng xếp hạng lúc nộp ≈ 91.5 |
 | #2 (33079) | 04/11 | `configs/pipeline.toml` = exp08 (exp07 + prompt v2) | 80.10 | 67.05 | +2.11 so với #1, chỉ đổi prompt (retrieval giống #1 ở 42/42 câu). Câu trả lời trung vị 452 → 258 ký tự, 0 markdown, 5 câu từ chối. Điểm cao nhất bảng lúc nộp ≈ 93.2 |
+
+Chi tiết #2 (log chấm của trang thi) so với train (exp08, chấm judge):
+
+| Tập | Recall@5 | MRR@5 | NDCG@5 | Retrieval | String Presence | ROUGE-L | Groundedness | Relevancy | 1 − Noise | Abstention | Generation |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Train (exp08) | 0.9290 | 0.8643 | 0.8572 | 0.8835 | 0.8671 | 0.6316 | 0.9652 | 0.6821 | 0.9159 | 1.0000 | 0.8437 |
+| Public #2 | 0.8175 | 0.8163 | 0.7689 | **0.8009** | 0.8291 | 0.5807 | 0.9316 | **0.6153** | 0.8504 | 1.0000 | 0.8012 |
+
+Retrieval trên Public thấp hơn train 0.083 (Recall@5 −0.11), lớn hơn mức tụt của generation (−0.043). Một phần do cấu hình được chọn trên train, một phần do Public có 20/42 câu không dấu (train 26/126). Mỗi 0.01 retrieval = 0.5 điểm tổng, còn mỗi 0.01 của một metric generation chỉ = 0.083 điểm, nên retrieval là đòn bẩy lớn hơn.
