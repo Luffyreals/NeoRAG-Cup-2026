@@ -15,13 +15,15 @@ import streamlit as st
 from neorag.config import CONFIG_DIR
 from neorag.data import load_corpus
 from neorag.pipelines import load_pipeline
+from neorag.pipelines.followup import condense_question
 from neorag.pipelines.retrieval import ScoredDoc
 
 PIPELINE = os.getenv("NEORAG_PIPELINE", "neorag.pipelines.my_pipeline:MyPipeline")
 os.environ.setdefault("NEORAG_PIPELINE_CONFIG", str(CONFIG_DIR / "demo.toml"))
 
-# Tên các bước do MyPipeline.run(..., timings) đo, theo thứ tự chạy.
+# Tên các bước theo thứ tự chạy: "followup" do chatbot đo, còn lại do MyPipeline.run(..., timings).
 STEP_LABELS = {
+    "followup": "Hiểu ngữ cảnh",
     "rewrite": "Viết lại câu hỏi",
     "search": "Tìm kiếm",
     "rerank": "Xếp hạng lại",
@@ -119,6 +121,23 @@ def render_sources(doc_ids: list[int]) -> None:
                 st.markdown(f"**{label} · {d.topic}**\n\n{d.text}")
 
 
+def standalone_question(pipeline, history: list[dict], question: str, timings: dict[str, float]):
+    """Câu hỏi nối tiếp → câu tự đủ nghĩa (cần lịch sử và pipeline có LLM; không thì giữ nguyên)."""
+    llm = getattr(pipeline, "llm", None)
+    if not history or llm is None:
+        return question
+    start = time.perf_counter()
+    model = getattr(pipeline, "llm_model", "claude-haiku-5-5")
+    result = condense_question(llm, model, history, question)
+    timings["followup"] = time.perf_counter() - start
+    return result
+
+
+def show_standalone(standalone: str | None) -> None:
+    if standalone:
+        st.caption(f"Hiểu câu hỏi là: _{standalone}_")
+
+
 def format_timings(timings: dict[str, float], total: float) -> str:
     parts = [f"{label} {timings[k]:.1f}s" for k, label in STEP_LABELS.items() if k in timings]
     if "first_piece" in timings:
@@ -133,12 +152,14 @@ if "messages" not in st.session_state:
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
+        show_standalone(msg.get("standalone"))
         st.markdown(msg["content"])
         if msg.get("timing"):
             st.caption(msg["timing"])
         render_sources(msg.get("sources", []))
 
 if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC..."):
+    history = list(st.session_state.messages)
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
@@ -147,7 +168,11 @@ if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC
         start = time.perf_counter()
         timings: dict[str, float] = {}
         with st.spinner("Đang tìm tài liệu liên quan..."):
-            retrieved_ids, pieces = answer_stream(pipeline, question, timings)
+            query = standalone_question(pipeline, history, question, timings)
+            # Chỉ hiện khi câu hỏi thực sự được viết lại, để người dùng biết chatbot hiểu đúng.
+            standalone = query if query.strip() != question.strip() else None
+            show_standalone(standalone)
+            retrieved_ids, pieces = answer_stream(pipeline, query, timings)
         answer = st.write_stream(mark_first_piece(pieces, start, timings))
         timing = format_timings(timings, time.perf_counter() - start)
         st.caption(timing)
@@ -156,5 +181,11 @@ if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC
         )
         render_sources(sources)
     st.session_state.messages.append(
-        {"role": "assistant", "content": answer, "timing": timing, "sources": sources}
+        {
+            "role": "assistant",
+            "content": answer,
+            "timing": timing,
+            "sources": sources,
+            "standalone": standalone,
+        }
     )
