@@ -119,3 +119,33 @@ class CrossEncoderReranker:
         floor = reranked[-1].score
         # phần đuôi nằm ngay dưới ứng viên thấp nhất, không làm giãn thang điểm
         return reranked + [ScoredDoc(h.doc, floor - 1e-6 * (i + 1)) for i, h in enumerate(tail)]
+
+    def rerank_groups(
+        self, groups: list[tuple[str, list[ScoredDoc]]], hits: list[ScoredDoc]
+    ) -> list[ScoredDoc]:
+        """Mỗi câu hỏi chỉ chấm nhóm ứng viên của riêng nó; điểm doc = max qua các câu đã chấm nó.
+
+        Khác `rerank_multi` (mọi câu × cùng top_n ứng viên): câu hỏi con về một CLB tự mang ứng viên
+        tốt nhất của nó vào, nên doc trả lời ý phụ không bị loại chỉ vì ngoài top_n sau khi gộp RRF,
+        và số cặp phải chấm ít hơn. Doc trong `hits` không thuộc nhóm nào xếp sau, giữ thứ tự.
+        """
+        pairs: dict[tuple[str, int], tuple[str, str]] = {}
+        docs = {}
+        for query, group in groups:
+            for h in group:
+                pairs.setdefault((query, h.doc.id), (query, h.doc.text))
+                docs[h.doc.id] = h.doc
+        if not pairs:
+            return hits
+        model = self.load()
+        with self._lock:
+            flat = model.predict(
+                list(pairs.values()), batch_size=self.batch_size, show_progress_bar=False
+            )
+        best: dict[int, float] = {}
+        for (_, doc_id), score in zip(pairs, flat, strict=True):
+            best[doc_id] = max(best.get(doc_id, float("-inf")), float(score))
+        reranked = sorted((ScoredDoc(docs[i], s) for i, s in best.items()), key=lambda h: -h.score)
+        floor = reranked[-1].score
+        tail = [h for h in hits if h.doc.id not in best]
+        return reranked + [ScoredDoc(h.doc, floor - 1e-6 * (i + 1)) for i, h in enumerate(tail)]

@@ -91,6 +91,9 @@ class RerankerConfig:
     # none: chấm bằng một câu (`query`); max | rrf | mix: chấm với từng câu viết lại (câu đầy đủ +
     # các câu hỏi con) rồi gộp điểm, để doc trả lời ý phụ của câu nhiều ý không bị đẩy xuống.
     multi_query: str = "none"
+    # > 0 (cần multi_query = "max"): câu viết lại đầy đủ chấm top_n ứng viên như cũ, còn mỗi câu hỏi
+    # con chỉ chấm sub_query_k ứng viên tốt nhất của riêng nó (exp13). 0 = mọi câu × top_n ứng viên.
+    sub_query_k: int = 0
     quantize: bool = False  # int8 động trên CPU: nhanh hơn ~2 lần, điểm lệch nhẹ (exp12)
 
 
@@ -175,6 +178,8 @@ class MyPipeline(RAGPipeline):
             raise ValueError(f"reranker.query không hợp lệ: {config.reranker.query!r}")
         if config.reranker.multi_query not in ("none", "max", "rrf", "mix"):
             raise ValueError(f"reranker.multi_query không hợp lệ: {config.reranker.multi_query!r}")
+        if config.reranker.sub_query_k > 0 and config.reranker.multi_query != "max":
+            raise ValueError('reranker.sub_query_k cần reranker.multi_query = "max"')
         self.config = config
         self.llm_model = config.llm.model
         self.llm = llm or LLMClient(cache_path=config.llm.cache_path)
@@ -238,16 +243,24 @@ class MyPipeline(RAGPipeline):
             rewrites = self.rewriter.rewrite(query) if self.should_rewrite(query) else []
         with timed(timings, "search"):
             rankings, weights = [], []
+            per_query = {}  # xếp hạng riêng của từng câu, cho rerank theo nhóm (sub_query_k)
             for q, qw in [(query, cfg.rewrite.original_weight)] + [(q, 1.0) for q in rewrites]:
                 lists, ws = self._rankings(q)
                 rankings += lists
                 weights += [qw * w for w in ws]
+                per_query[q] = (lists, ws)
             hits = rrf_fuse(rankings, weights, cfg.retrieval.rrf_k)
 
         if self.reranker is not None:
             use_rewrite = cfg.reranker.query == "rewrite" and rewrites
             with timed(timings, "rerank"):
-                if cfg.reranker.multi_query != "none" and len(rewrites) > 1:
+                if cfg.reranker.sub_query_k > 0 and len(rewrites) > 1:
+                    k = cfg.reranker.sub_query_k
+                    groups = [(rewrites[0], hits[: cfg.reranker.top_n])] + [
+                        (q, rrf_fuse(*per_query[q], cfg.retrieval.rrf_k)[:k]) for q in rewrites[1:]
+                    ]
+                    hits = self.reranker.rerank_groups(groups, hits)
+                elif cfg.reranker.multi_query != "none" and len(rewrites) > 1:
                     hits = self.reranker.rerank_multi(
                         rewrites, hits, cfg.reranker.multi_query, cfg.retrieval.rrf_k
                     )
