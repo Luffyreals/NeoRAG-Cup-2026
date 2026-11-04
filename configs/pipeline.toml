@@ -2,7 +2,7 @@
 # Đổi file khác bằng biến môi trường NEORAG_PIPELINE_CONFIG=path/to/file.toml
 # (chatbot demo dùng configs/demo.toml: nhanh hơn, retrieval thấp hơn một chút).
 # Mục không ghi lấy giá trị mặc định trong my_pipeline.py (= baseline).
-# Mỗi lựa chọn dưới đây có số liệu trong docs/experiments.md (exp08 là cấu hình này).
+# Mỗi lựa chọn dưới đây có số liệu trong docs/experiments.md (exp10 max là cấu hình này).
 
 [llm]
 model = "claude-haiku-5-5"  # model duy nhất được phép dùng trong cuộc thi
@@ -32,6 +32,7 @@ only_unaccented = false  # chỉ viết lại câu không dấu làm tụt đi�
 enabled = true  # cross-encoder local BAAI/bge-reranker-v2-m3 (exp06)
 top_n = 20  # top-10 nhanh hơn nhưng retrieval −0.006 (exp06c)
 num_threads = 4  # i7-12800H: 4 luồng nhanh hơn mặc định 14; đo lại nếu đổi máy
+multi_query = "max"  # rerank với từng câu hỏi con, lấy điểm cao nhất (exp09; Public retrieval 80.1 → 88.6)
 
 [club_boost]
 enabled = true  # ưu tiên mềm doc của CLB được nhắc trong câu hỏi (exp07)
