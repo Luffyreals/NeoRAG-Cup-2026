@@ -12,6 +12,7 @@ import time
 
 import streamlit as st
 
+from neorag.chat_errors import friendly_error
 from neorag.config import CONFIG_DIR
 from neorag.data import load_corpus
 from neorag.pipelines import load_pipeline
@@ -41,6 +42,15 @@ SHOWN_SOURCES = 3  # số nguồn hiện sẵn; các nguồn còn lại đưa v�
 SNIPPET_CHARS = 160
 # Câu mở đầu prompt v2 dùng khi tài liệu không có đáp án: khi đó không hiện nguồn (nguồn không liên quan).
 NO_INFO_PREFIX = "Tài liệu hiện có không có thông tin"
+
+# Câu hỏi mẫu ở sidebar: mỗi câu cho thấy một khả năng của chatbot.
+EXAMPLE_QUESTIONS = [
+    "CLB Lập Trình PTIT thành lập ngày nào?",  # câu hỏi một ý, có số liệu
+    "MPC và GCC khác nhau thế nào?",  # so sánh hai CLB
+    "lam sao de dang ky vao proptit",  # gõ không dấu
+    "Muốn liên hệ cả 3 CLB trong S2B thì liên hệ qua đâu?",  # nhiều ý, nhiều CLB
+    "Học phí của PTIT là bao nhiêu?",  # không có trong tài liệu: chatbot phải từ chối
+]
 
 st.set_page_config(page_title="NeoRAG Chatbot - S2B", page_icon="💬")
 st.title("💬 Hỏi đáp cộng đồng S2B")
@@ -138,6 +148,29 @@ def show_standalone(standalone: str | None) -> None:
         st.caption(f"Hiểu câu hỏi là: _{standalone}_")
 
 
+def config_summary(pipeline) -> list[str]:
+    """Các dòng mô tả cấu hình đang chạy (để biết chắc app đã nạp đúng config)."""
+    lines = [f"Pipeline: `{type(pipeline).__name__}`"]
+    config = getattr(pipeline, "config", None)
+    if config is None:
+        return lines
+    r, rr, g = config.retrieval, config.reranker, config.generation
+    lines.append(f"Config: `{os.path.basename(os.environ['NEORAG_PIPELINE_CONFIG'])}`")
+    lines.append(
+        f"Truy xuất: {r.method} ({r.embedding_model} + BM25), viết lại câu hỏi: "
+        f"{'bật' if config.rewrite.enabled else 'tắt'}"
+    )
+    if rr.enabled:
+        extra = ", int8" if rr.quantize else ""
+        if rr.multi_query != "none":
+            extra += f", theo câu hỏi con ({rr.multi_query})"
+        lines.append(f"Xếp hạng lại: {rr.model.split('/')[-1]}, top-{rr.top_n}{extra}")
+    lines.append(f"Sinh: {config.llm.model}, prompt {g.prompt}, {g.top_k} tài liệu")
+    if device := getattr(pipeline, "device", None):
+        lines.append(f"Thiết bị: {device}")
+    return lines
+
+
 def format_timings(timings: dict[str, float], total: float) -> str:
     parts = [f"{label} {timings[k]:.1f}s" for k, label in STEP_LABELS.items() if k in timings]
     if "first_piece" in timings:
@@ -150,16 +183,48 @@ pipeline, docs = get_pipeline()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+with st.sidebar:
+    st.subheader("Câu hỏi mẫu")
+    for example in EXAMPLE_QUESTIONS:
+        if st.button(example, use_container_width=True):
+            st.session_state.pending_question = example
+    st.divider()
+    if st.button("🗑️ Xóa hội thoại", use_container_width=True, type="secondary"):
+        st.session_state.messages = []
+        st.session_state.pop("pending_question", None)
+        st.rerun()
+    with st.expander("Cấu hình đang chạy"):
+        st.markdown("\n".join(f"- {line}" for line in config_summary(pipeline)))
+    st.caption(f"Trả lời dựa trên {len(docs)} tài liệu về cộng đồng S2B.")
+
+# Ô nhập luôn nằm cuối trang dù gọi ở đâu; đọc câu hỏi trước để ẩn lời chào khi đã có câu hỏi.
+typed = st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC...")
+question = typed or st.session_state.pop("pending_question", None)
+
+if not st.session_state.messages and not question:
+    st.info(
+        "Chào bạn! Mình trả lời các câu hỏi về CLB Lập Trình PTIT, CLB Multimedia PTIT và "
+        "CLB Nhà Sáng Tạo Game PTIT: lịch sử, tuyển thành viên, hoạt động, liên hệ... "
+        "Bạn có thể gõ không dấu, hỏi nhiều ý một lúc, hoặc hỏi tiếp câu trước. "
+        "Chọn một câu hỏi mẫu ở thanh bên để bắt đầu."
+    )
+
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         show_standalone(msg.get("standalone"))
-        st.markdown(msg["content"])
+        if msg.get("error"):
+            st.error(msg["content"], icon="⚠️")
+        else:
+            st.markdown(msg["content"])
         if msg.get("timing"):
             st.caption(msg["timing"])
         render_sources(msg.get("sources", []))
 
-if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC..."):
-    history = list(st.session_state.messages)
+if question:
+    # Lịch sử cho câu hỏi nối tiếp: bỏ các lượt bị lỗi (không có câu trả lời thật).
+    history = [m for m in st.session_state.messages if not m.get("error")]
+    if history and history[-1]["role"] == "user":
+        history = history[:-1]  # câu hỏi trước bị lỗi, không có câu trả lời đi kèm
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
@@ -167,13 +232,24 @@ if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC
     with st.chat_message("assistant"):
         start = time.perf_counter()
         timings: dict[str, float] = {}
-        with st.spinner("Đang tìm tài liệu liên quan..."):
-            query = standalone_question(pipeline, history, question, timings)
-            # Chỉ hiện khi câu hỏi thực sự được viết lại, để người dùng biết chatbot hiểu đúng.
-            standalone = query if query.strip() != question.strip() else None
-            show_standalone(standalone)
-            retrieved_ids, pieces = answer_stream(pipeline, query, timings)
-        answer = st.write_stream(mark_first_piece(pieces, start, timings))
+        standalone = None
+        try:
+            with st.spinner("Đang tìm tài liệu liên quan..."):
+                query = standalone_question(pipeline, history, question, timings)
+                # Chỉ hiện khi câu hỏi thực sự được viết lại, để người dùng biết chatbot hiểu đúng.
+                standalone = query if query.strip() != question.strip() else None
+                show_standalone(standalone)
+                retrieved_ids, pieces = answer_stream(pipeline, query, timings)
+            answer = st.write_stream(mark_first_piece(pieces, start, timings))
+        except Exception as exc:  # lỗi gateway/mạng: báo dễ hiểu thay vì traceback
+            message = friendly_error(exc)
+            st.error(message, icon="⚠️")
+            with st.expander("Chi tiết lỗi"):
+                st.code(f"{type(exc).__name__}: {exc}")
+            st.session_state.messages.append(
+                {"role": "assistant", "content": message, "error": True, "standalone": standalone}
+            )
+            st.stop()
         timing = format_timings(timings, time.perf_counter() - start)
         st.caption(timing)
         sources = (
