@@ -70,11 +70,12 @@ Retrieval giữ nguyên exp07 (0.8835). Chấm `--no-judge`: chỉ String Presen
 | #1 (33066) | 04/11 | `configs/pipeline.toml` = exp07 + generation prompt baseline | 77.99 | 64.56 | Retrieval đã tối ưu, generation chưa. Từ norm suy ra điểm cao nhất bảng xếp hạng lúc nộp ≈ 91.5 |
 | #2 (33079) | 04/11 | `configs/pipeline.toml` = exp08 (exp07 + prompt v2) | 80.10 | 67.05 | +2.11 so với #1, chỉ đổi prompt (retrieval giống #1 ở 42/42 câu). Câu trả lời trung vị 452 → 258 ký tự, 0 markdown, 5 câu từ chối. Điểm cao nhất bảng lúc nộp ≈ 93.2 |
 
-Chi tiết #2 (log chấm của trang thi) so với train (exp08, chấm judge):
+Chi tiết điểm (log chấm của trang thi) so với train (exp08, chấm judge):
 
 | Tập | Recall@5 | MRR@5 | NDCG@5 | Retrieval | String Presence | ROUGE-L | Groundedness | Relevancy | 1 − Noise | Abstention | Generation |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Train (exp08) | 0.9290 | 0.8643 | 0.8572 | 0.8835 | 0.8671 | 0.6316 | 0.9652 | 0.6821 | 0.9159 | 1.0000 | 0.8437 |
+| Public #1 | 0.8175 | 0.8163 | 0.7689 | 0.8009 | 0.8120 | 0.4410 | 0.9240 | 0.5896 | 0.7876 | 1.0000 | 0.7590 |
 | Public #2 | 0.8175 | 0.8163 | 0.7689 | **0.8009** | 0.8291 | 0.5807 | 0.9316 | **0.6153** | 0.8504 | 1.0000 | 0.8012 |
 
-Retrieval trên Public thấp hơn train 0.083 (Recall@5 −0.11), lớn hơn mức tụt của generation (−0.043). Một phần do cấu hình được chọn trên train, một phần do Public có 20/42 câu không dấu (train 26/126). Mỗi 0.01 retrieval = 0.5 điểm tổng, còn mỗi 0.01 của một metric generation chỉ = 0.083 điểm, nên retrieval là đòn bẩy lớn hơn.
+#1 → #2 (chỉ đổi prompt): ROUGE-L +0.140, 1 − Noise +0.063, Relevancy +0.026, String Presence +0.017, Groundedness +0.008; generation +0.042, khớp với hướng tăng trên train. Retrieval trên Public thấp hơn train 0.083 (Recall@5 −0.11), lớn hơn mức chênh của generation (−0.043). Không phải do câu không dấu: trên train, nhóm câu không dấu có retrieval 0.896 (26 câu), còn cao hơn nhóm có dấu 0.880 (96 câu). Nhiều khả năng do cấu hình được chọn trên train (overfit) và câu hỏi Public khác phân bố. Mỗi 0.01 retrieval = 0.5 điểm tổng, còn mỗi 0.01 của một metric generation chỉ = 0.083 điểm, nên retrieval là đòn bẩy lớn hơn.
