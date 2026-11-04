@@ -1,20 +1,32 @@
-"""Chatbot mẫu cho phần Demo Product. Chạy: python -m streamlit run app/chat.py
+"""Chatbot hỏi đáp cộng đồng S2B. Chạy: python -m streamlit run app/chat.py
 
-Đổi pipeline bằng biến môi trường NEORAG_PIPELINE="module.path:ClassName".
-Đây chỉ là điểm khởi đầu: giao diện, streaming, lịch sử hội thoại... là phần bạn tự cải thiện.
+Mặc định dùng MyPipeline với configs/demo.toml (reranker top-10: nhanh hơn cấu hình benchmark).
+Đổi pipeline bằng NEORAG_PIPELINE="module.path:ClassName", đổi cấu hình bằng NEORAG_PIPELINE_CONFIG.
 """
 
 from __future__ import annotations
 
+import inspect
 import os
 import time
 
 import streamlit as st
 
+from neorag.config import CONFIG_DIR
 from neorag.data import load_corpus
 from neorag.pipelines import load_pipeline
+from neorag.pipelines.retrieval import ScoredDoc
 
-PIPELINE = os.getenv("NEORAG_PIPELINE", "neorag.pipelines.baseline:BaselinePipeline")
+PIPELINE = os.getenv("NEORAG_PIPELINE", "neorag.pipelines.my_pipeline:MyPipeline")
+os.environ.setdefault("NEORAG_PIPELINE_CONFIG", str(CONFIG_DIR / "demo.toml"))
+
+# Tên các bước do MyPipeline.run(..., timings) đo, theo thứ tự chạy.
+STEP_LABELS = {
+    "rewrite": "Viết lại câu hỏi",
+    "search": "Tìm kiếm",
+    "rerank": "Xếp hạng lại",
+    "generate": "Sinh câu trả lời",
+}
 
 st.set_page_config(page_title="NeoRAG Chatbot - S2B", page_icon="💬")
 st.title("💬 Hỏi đáp cộng đồng S2B")
@@ -27,7 +39,25 @@ def get_pipeline():
     pipeline = load_pipeline(PIPELINE)
     pipeline.prepare()
     pipeline.index(corpus)
+    # Chạy thử reranker một lần: lần suy luận đầu của PyTorch chậm hơn hẳn các lần sau,
+    # nên làm trước để câu hỏi đầu tiên của người dùng không phải chịu.
+    reranker = getattr(pipeline, "reranker", None)
+    if reranker is not None:
+        reranker.rerank("khởi động", [ScoredDoc(corpus[0], 0.0)])
     return pipeline, {d.id: d for d in corpus}
+
+
+def run_with_timings(pipeline, question: str):
+    """Chạy pipeline; trả thêm thời gian từng bước nếu pipeline hỗ trợ đo."""
+    timings: dict[str, float] = {}
+    if "timings" in inspect.signature(pipeline.run).parameters:
+        return pipeline.run(question, timings=timings), timings
+    return pipeline.run(question), timings
+
+
+def format_timings(timings: dict[str, float], total: float) -> str:
+    parts = [f"{label} {timings[k]:.1f}s" for k, label in STEP_LABELS.items() if k in timings]
+    return " · ".join(parts + [f"Tổng {total:.1f}s"])
 
 
 pipeline, docs = get_pipeline()
@@ -38,6 +68,8 @@ if "messages" not in st.session_state:
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        if msg.get("timing"):
+            st.caption(msg["timing"])
 
 if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC..."):
     st.session_state.messages.append({"role": "user", "content": question})
@@ -47,10 +79,12 @@ if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC
     with st.chat_message("assistant"):
         start = time.perf_counter()
         with st.spinner("Đang tìm câu trả lời..."):
-            out = pipeline.run(question)
+            out, timings = run_with_timings(pipeline, question)
+        timing = format_timings(timings, time.perf_counter() - start)
         st.markdown(out.answer)
-        with st.expander(f"Nguồn tham khảo · {(time.perf_counter() - start):.1f}s"):
+        st.caption(timing)
+        with st.expander("Nguồn tham khảo"):
             for doc_id in out.retrieved_ids:
                 d = docs[doc_id]
                 st.markdown(f"**[{d.id}] {d.club}** · _{d.topic}_\n\n{d.text}")
-    st.session_state.messages.append({"role": "assistant", "content": out.answer})
+    st.session_state.messages.append({"role": "assistant", "content": out.answer, "timing": timing})

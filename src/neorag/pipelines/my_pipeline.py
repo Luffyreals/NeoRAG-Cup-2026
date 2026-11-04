@@ -6,6 +6,8 @@ Chạy: neorag run train --no-judge --pipeline neorag.pipelines.my_pipeline:MyPi
 from __future__ import annotations
 
 import os
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -25,6 +27,17 @@ DEFAULT_CONFIG = CONFIG_DIR / "pipeline.toml"
 RETRIEVAL_ONLY_ANSWER = "(retrieval-only)"
 
 # Giá trị mặc định của các dataclass = hành vi baseline; configs/pipeline.toml bật các cải tiến.
+
+
+@contextmanager
+def timed(timings: dict[str, float] | None, step: str):
+    """Cộng thời gian chạy (giây) của khối lệnh vào `timings[step]`; None thì không đo."""
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        if timings is not None:
+            timings[step] = timings.get(step, 0.0) + time.perf_counter() - start
 
 
 @dataclass
@@ -216,32 +229,37 @@ class MyPipeline(RAGPipeline):
         cfg = self.config.rewrite
         return not cfg.only_unaccented or accent_ratio(query) < cfg.accent_ratio
 
-    def retrieve(self, query: str) -> list[ScoredDoc]:
+    def retrieve(self, query: str, timings: dict[str, float] | None = None) -> list[ScoredDoc]:
+        """Truy xuất doc; truyền `timings` để nhận thời gian từng bước (chatbot hiển thị)."""
         cfg = self.config
-        rewrites = self.rewriter.rewrite(query) if self.should_rewrite(query) else []
-        rankings, weights = [], []
-        for q, qw in [(query, cfg.rewrite.original_weight)] + [(q, 1.0) for q in rewrites]:
-            lists, ws = self._rankings(q)
-            rankings += lists
-            weights += [qw * w for w in ws]
-        hits = rrf_fuse(rankings, weights, cfg.retrieval.rrf_k)
+        with timed(timings, "rewrite"):
+            rewrites = self.rewriter.rewrite(query) if self.should_rewrite(query) else []
+        with timed(timings, "search"):
+            rankings, weights = [], []
+            for q, qw in [(query, cfg.rewrite.original_weight)] + [(q, 1.0) for q in rewrites]:
+                lists, ws = self._rankings(q)
+                rankings += lists
+                weights += [qw * w for w in ws]
+            hits = rrf_fuse(rankings, weights, cfg.retrieval.rrf_k)
 
         if self.reranker is not None:
             use_rewrite = cfg.reranker.query == "rewrite" and rewrites
-            if cfg.reranker.multi_query != "none" and len(rewrites) > 1:
-                hits = self.reranker.rerank_multi(
-                    rewrites, hits, cfg.reranker.multi_query, cfg.retrieval.rrf_k
-                )
-            else:
-                hits = self.reranker.rerank(rewrites[0] if use_rewrite else query, hits)
+            with timed(timings, "rerank"):
+                if cfg.reranker.multi_query != "none" and len(rewrites) > 1:
+                    hits = self.reranker.rerank_multi(
+                        rewrites, hits, cfg.reranker.multi_query, cfg.retrieval.rrf_k
+                    )
+                else:
+                    hits = self.reranker.rerank(rewrites[0] if use_rewrite else query, hits)
         if cfg.club_boost.enabled:
             hits = boost_clubs(hits, detect_clubs(query, *rewrites), cfg.club_boost.boost)
         return hits[: cfg.retrieval.n_retrieved]
 
-    def run(self, query: str) -> RAGOutput:
-        docs = [h.doc for h in self.retrieve(query)]
+    def run(self, query: str, timings: dict[str, float] | None = None) -> RAGOutput:
+        docs = [h.doc for h in self.retrieve(query, timings)]
         if self.config.generation.enabled:
-            answer = self.generator.generate(query, docs)
+            with timed(timings, "generate"):
+                answer = self.generator.generate(query, docs)
         else:
             answer = RETRIEVAL_ONLY_ANSWER
         return RAGOutput(answer=answer, retrieved_ids=[d.id for d in docs])

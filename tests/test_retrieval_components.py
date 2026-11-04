@@ -266,3 +266,18 @@ def test_invalid_reranker_query_raises():
         make({"reranker": {"multi_query": "nope"}})
     with pytest.raises(TypeError):
         PipelineConfig.from_dict({"unknown_section": {}})
+
+
+def test_run_reports_step_timings(club_corpus):
+    reranker = FakeReranker()
+    pipeline = make(
+        {"rewrite": {"enabled": True}, "reranker": {"enabled": True}},
+        lambda m: "Câu viết lại",
+        reranker,
+    )
+    pipeline.index(club_corpus)
+    timings = {}
+    out = pipeline.run("gcc tuyen tv", timings=timings)
+    assert set(timings) == {"rewrite", "search", "rerank", "generate"}
+    assert all(t >= 0 for t in timings.values())
+    assert out.retrieved_ids == pipeline.run("gcc tuyen tv").retrieved_ids  # không đo vẫn chạy
