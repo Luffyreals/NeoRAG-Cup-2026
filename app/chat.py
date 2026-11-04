@@ -47,16 +47,33 @@ def get_pipeline():
     return pipeline, {d.id: d for d in corpus}
 
 
-def run_with_timings(pipeline, question: str):
-    """Chạy pipeline; trả thêm thời gian từng bước nếu pipeline hỗ trợ đo."""
-    timings: dict[str, float] = {}
+def answer_stream(pipeline, question: str, timings: dict[str, float]):
+    """Trả (retrieved_ids, iterator các đoạn chữ của câu trả lời).
+
+    Pipeline có `run_stream` (MyPipeline) thì chữ hiện dần ngay khi model sinh; pipeline khác
+    (ví dụ baseline) thì chạy `run` như cũ và trả cả câu một lần.
+    """
+    if hasattr(pipeline, "run_stream"):
+        return pipeline.run_stream(question, timings=timings)
     if "timings" in inspect.signature(pipeline.run).parameters:
-        return pipeline.run(question, timings=timings), timings
-    return pipeline.run(question), timings
+        out = pipeline.run(question, timings=timings)
+    else:
+        out = pipeline.run(question)
+    return out.retrieved_ids, iter([out.answer])
+
+
+def mark_first_piece(pieces, start: float, timings: dict[str, float]):
+    """Ghi lại lúc chữ đầu tiên hiện ra: đây là thời gian người dùng thực sự phải chờ."""
+    for i, piece in enumerate(pieces):
+        if i == 0:
+            timings["first_piece"] = time.perf_counter() - start
+        yield piece
 
 
 def format_timings(timings: dict[str, float], total: float) -> str:
     parts = [f"{label} {timings[k]:.1f}s" for k, label in STEP_LABELS.items() if k in timings]
+    if "first_piece" in timings:
+        parts.append(f"Chữ đầu tiên sau {timings['first_piece']:.1f}s")
     return " · ".join(parts + [f"Tổng {total:.1f}s"])
 
 
@@ -78,13 +95,14 @@ if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC
 
     with st.chat_message("assistant"):
         start = time.perf_counter()
-        with st.spinner("Đang tìm câu trả lời..."):
-            out, timings = run_with_timings(pipeline, question)
+        timings: dict[str, float] = {}
+        with st.spinner("Đang tìm tài liệu liên quan..."):
+            retrieved_ids, pieces = answer_stream(pipeline, question, timings)
+        answer = st.write_stream(mark_first_piece(pieces, start, timings))
         timing = format_timings(timings, time.perf_counter() - start)
-        st.markdown(out.answer)
         st.caption(timing)
         with st.expander("Nguồn tham khảo"):
-            for doc_id in out.retrieved_ids:
+            for doc_id in retrieved_ids:
                 d = docs[doc_id]
                 st.markdown(f"**[{d.id}] {d.club}** · _{d.topic}_\n\n{d.text}")
-    st.session_state.messages.append({"role": "assistant", "content": out.answer, "timing": timing})
+    st.session_state.messages.append({"role": "assistant", "content": answer, "timing": timing})

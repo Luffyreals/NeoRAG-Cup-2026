@@ -17,6 +17,11 @@ class FakeLLM:
         self.calls.append(messages)
         return self.responder(messages)
 
+    def chat_stream(self, messages, model):
+        self.calls.append(messages)
+        text = self.responder(messages)
+        yield from (text[i : i + 4] for i in range(0, len(text), 4))
+
 
 class FakeEmbedder:
     """Embedding giả cho test: bag-of-characters, chuẩn hóa L2."""

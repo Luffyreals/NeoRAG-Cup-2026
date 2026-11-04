@@ -11,6 +11,7 @@ import json
 import os
 import sqlite3
 import threading
+from collections.abc import Iterator
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -84,6 +85,31 @@ class LLMClient:
         if self._cache:
             self._cache.set(key, text)
         return text
+
+    def chat_stream(self, messages: list[dict], model: str) -> Iterator[str]:
+        """Như `chat` nhưng trả từng đoạn chữ ngay khi model sinh ra (chatbot hiện dần câu trả lời).
+
+        Dùng chung khóa cache với `chat`: câu đã có trong cache thì trả cả câu một lần.
+        """
+        key = _key("chat", self._endpoint, model, None, messages)
+        if self._cache and (hit := self._cache.get(key)) is not None:
+            yield hit
+            return
+        stream = self._client.chat.completions.create(model=model, messages=messages, stream=True)
+        parts: list[str] = []
+        for chunk in stream:
+            piece = chunk.choices[0].delta.content if chunk.choices else None
+            if not piece:
+                continue
+            if not parts:
+                piece = piece.lstrip()  # giống `chat`: bỏ khoảng trắng đầu câu trả lời
+                if not piece:
+                    continue
+            parts.append(piece)
+            yield piece
+        text = "".join(parts).strip()
+        if self._cache and text:
+            self._cache.set(key, text)
 
     def embed(self, texts: list[str], model: str, batch_size: int = 32) -> list[list[float]]:
         if len(texts) > batch_size:

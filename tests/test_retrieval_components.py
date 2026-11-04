@@ -281,3 +281,19 @@ def test_run_reports_step_timings(club_corpus):
     assert set(timings) == {"rewrite", "search", "rerank", "generate"}
     assert all(t >= 0 for t in timings.values())
     assert out.retrieved_ids == pipeline.run("gcc tuyen tv").retrieved_ids  # không đo vẫn chạy
+
+
+def test_run_stream_matches_run(club_corpus):
+    pipeline = make({"retrieval": {"method": "hybrid"}}, lambda m: "GCC tuyển thành viên khóa mới.")
+    pipeline.index(club_corpus)
+    out = pipeline.run("gcc tuyen tv")
+    timings = {}
+    ids, pieces = pipeline.run_stream("gcc tuyen tv", timings=timings)
+    assert ids == out.retrieved_ids
+    assert "generate" not in timings  # chưa đọc iterator thì chưa sinh
+    chunks = list(pieces)
+    assert len(chunks) > 1 and "".join(chunks) == out.answer
+    assert "generate" in timings
+    disabled = make({"generation": {"enabled": False}})
+    disabled.index(club_corpus)
+    assert list(disabled.run_stream("gcc")[1]) == [RETRIEVAL_ONLY_ANSWER]

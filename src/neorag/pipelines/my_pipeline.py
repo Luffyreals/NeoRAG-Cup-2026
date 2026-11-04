@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -263,3 +264,21 @@ class MyPipeline(RAGPipeline):
         else:
             answer = RETRIEVAL_ONLY_ANSWER
         return RAGOutput(answer=answer, retrieved_ids=[d.id for d in docs])
+
+    def run_stream(
+        self, query: str, timings: dict[str, float] | None = None
+    ) -> tuple[list[int], Iterator[str]]:
+        """Cho chatbot: truy xuất xong mới trả về, còn câu trả lời là iterator sinh dần từng đoạn.
+
+        `timings["generate"]` chỉ có sau khi đọc hết iterator.
+        """
+        docs = [h.doc for h in self.retrieve(query, timings)]
+        ids = [d.id for d in docs]
+        if not self.config.generation.enabled:
+            return ids, iter([RETRIEVAL_ONLY_ANSWER])
+
+        def pieces() -> Iterator[str]:
+            with timed(timings, "generate"):
+                yield from self.generator.generate_stream(query, docs)
+
+        return ids, pieces()
