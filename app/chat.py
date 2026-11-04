@@ -28,6 +28,18 @@ STEP_LABELS = {
     "generate": "Sinh câu trả lời",
 }
 
+# Nhãn ngắn và màu cho từng CLB khi hiện nguồn tham khảo.
+CLUB_BADGES = {
+    "CLB Lập Trình PTIT": ("ProPTIT", "blue"),
+    "CLB Multimedia PTIT": ("Multimedia", "violet"),
+    "CLB Nhà Sáng Tạo Game PTIT (GCC)": ("GCC", "orange"),
+    "Cộng đồng S2B": ("S2B", "green"),
+}
+SHOWN_SOURCES = 3  # số nguồn hiện sẵn; các nguồn còn lại đưa vào prompt nằm trong mục "Thêm"
+SNIPPET_CHARS = 160
+# Câu mở đầu prompt v2 dùng khi tài liệu không có đáp án: khi đó không hiện nguồn (nguồn không liên quan).
+NO_INFO_PREFIX = "Tài liệu hiện có không có thông tin"
+
 st.set_page_config(page_title="NeoRAG Chatbot - S2B", page_icon="💬")
 st.title("💬 Hỏi đáp cộng đồng S2B")
 st.caption("CLB Lập Trình PTIT · CLB Multimedia PTIT · CLB Nhà Sáng Tạo Game PTIT")
@@ -70,6 +82,43 @@ def mark_first_piece(pieces, start: float, timings: dict[str, float]):
         yield piece
 
 
+def snippet(text: str, limit: int = SNIPPET_CHARS) -> str:
+    """Đoạn đầu của doc, cắt ở ranh giới từ."""
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0] + "…"
+
+
+def used_doc_count(pipeline) -> int:
+    """Số doc đầu được đưa vào prompt sinh câu trả lời (chỉ những doc này mới là nguồn thật)."""
+    config = getattr(pipeline, "config", None)
+    return config.generation.top_k if config is not None else 5
+
+
+def render_source(doc) -> None:
+    label, color = CLUB_BADGES.get(doc.club, (doc.club, "gray"))
+    with st.container(border=True):
+        st.markdown(f":{color}-badge[{label}] **{doc.topic}**")
+        st.caption(snippet(doc.text))
+        if len(doc.text) > SNIPPET_CHARS:
+            with st.expander("Xem toàn văn"):
+                st.markdown(doc.text)
+
+
+def render_sources(doc_ids: list[int]) -> None:
+    if not doc_ids:
+        return
+    st.caption("Nguồn tham khảo")
+    for doc_id in doc_ids[:SHOWN_SOURCES]:
+        render_source(docs[doc_id])
+    if rest := doc_ids[SHOWN_SOURCES:]:
+        with st.expander(f"Thêm {len(rest)} nguồn khác"):
+            for doc_id in rest:
+                d = docs[doc_id]
+                label = CLUB_BADGES.get(d.club, (d.club, "gray"))[0]
+                st.markdown(f"**{label} · {d.topic}**\n\n{d.text}")
+
+
 def format_timings(timings: dict[str, float], total: float) -> str:
     parts = [f"{label} {timings[k]:.1f}s" for k, label in STEP_LABELS.items() if k in timings]
     if "first_piece" in timings:
@@ -87,6 +136,7 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
         if msg.get("timing"):
             st.caption(msg["timing"])
+        render_sources(msg.get("sources", []))
 
 if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC..."):
     st.session_state.messages.append({"role": "user", "content": question})
@@ -101,8 +151,10 @@ if question := st.chat_input("Hỏi gì đó về ProPTIT, Multimedia hoặc GCC
         answer = st.write_stream(mark_first_piece(pieces, start, timings))
         timing = format_timings(timings, time.perf_counter() - start)
         st.caption(timing)
-        with st.expander("Nguồn tham khảo"):
-            for doc_id in retrieved_ids:
-                d = docs[doc_id]
-                st.markdown(f"**[{d.id}] {d.club}** · _{d.topic}_\n\n{d.text}")
-    st.session_state.messages.append({"role": "assistant", "content": answer, "timing": timing})
+        sources = (
+            [] if answer.startswith(NO_INFO_PREFIX) else retrieved_ids[: used_doc_count(pipeline)]
+        )
+        render_sources(sources)
+    st.session_state.messages.append(
+        {"role": "assistant", "content": answer, "timing": timing, "sources": sources}
+    )
