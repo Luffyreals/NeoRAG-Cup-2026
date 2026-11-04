@@ -1,7 +1,7 @@
 """Chatbot hỏi đáp cộng đồng S2B. Chạy: python -m streamlit run app/chat.py
 
 Mặc định dùng MyPipeline với configs/demo.toml (reranker top-10: nhanh hơn cấu hình benchmark).
-Đổi pipeline bằng NEORAG_PIPELINE="module.path:ClassName", đổi cấu hình bằng NEORAG_PIPELINE_CONFIG.
+Đổi pipeline bằng NEORAG_PIPELINE="module.path:ClassName", đổi cấu hình bằng NEORAG_CHAT_CONFIG.
 """
 
 from __future__ import annotations
@@ -16,11 +16,15 @@ from neorag.chat_errors import friendly_error
 from neorag.config import CONFIG_DIR
 from neorag.data import load_corpus
 from neorag.pipelines import load_pipeline
-from neorag.pipelines.followup import condense_question
+from neorag.pipelines.followup import condense_question, needs_context
 from neorag.pipelines.retrieval import ScoredDoc
 
 PIPELINE = os.getenv("NEORAG_PIPELINE", "neorag.pipelines.my_pipeline:MyPipeline")
-os.environ.setdefault("NEORAG_PIPELINE_CONFIG", str(CONFIG_DIR / "demo.toml"))
+# Biến riêng cho chatbot: NEORAG_PIPELINE_CONFIG còn sót lại sau khi chạy thí nghiệm (thường là
+# config chỉ đo retrieval, tắt sinh câu trả lời) không được làm chatbot chạy sai cấu hình.
+os.environ["NEORAG_PIPELINE_CONFIG"] = os.getenv(
+    "NEORAG_CHAT_CONFIG", str(CONFIG_DIR / "demo.toml")
+)
 
 # Tên các bước theo thứ tự chạy: "followup" do chatbot đo, còn lại do MyPipeline.run(..., timings).
 STEP_LABELS = {
@@ -48,7 +52,7 @@ EXAMPLE_QUESTIONS = [
     "CLB Lập Trình PTIT thành lập ngày nào?",  # câu hỏi một ý, có số liệu
     "MPC và GCC khác nhau thế nào?",  # so sánh hai CLB
     "lam sao de dang ky vao proptit",  # gõ không dấu
-    "Muốn liên hệ cả 3 CLB trong S2B thì liên hệ qua đâu?",  # nhiều ý, nhiều CLB
+    "Chủ nhiệm hiện tại của MPC và GCC là ai?",  # nhiều CLB trong một câu
     "Học phí của PTIT là bao nhiêu?",  # không có trong tài liệu: chatbot phải từ chối
 ]
 
@@ -134,8 +138,8 @@ def render_sources(doc_ids: list[int]) -> None:
 def standalone_question(pipeline, history: list[dict], question: str, timings: dict[str, float]):
     """Câu hỏi nối tiếp → câu tự đủ nghĩa (cần lịch sử và pipeline có LLM; không thì giữ nguyên)."""
     llm = getattr(pipeline, "llm", None)
-    if not history or llm is None:
-        return question
+    if not history or llm is None or not needs_context(question):
+        return question  # không đo: bước này không chạy
     start = time.perf_counter()
     model = getattr(pipeline, "llm_model", "claude-haiku-5-5")
     result = condense_question(llm, model, history, question)
@@ -193,6 +197,9 @@ with st.sidebar:
         st.session_state.messages = []
         st.session_state.pop("pending_question", None)
         st.rerun()
+    config = getattr(pipeline, "config", None)
+    if config is not None and not config.generation.enabled:
+        st.warning("Cấu hình đang tắt sinh câu trả lời (chỉ đo retrieval).", icon="⚠️")
     with st.expander("Cấu hình đang chạy"):
         st.markdown("\n".join(f"- {line}" for line in config_summary(pipeline)))
     st.caption(f"Trả lời dựa trên {len(docs)} tài liệu về cộng đồng S2B.")

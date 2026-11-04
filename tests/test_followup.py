@@ -1,5 +1,10 @@
 from conftest import FakeLLM
-from neorag.pipelines.followup import MAX_ANSWER_CHARS, condense_question, format_history
+from neorag.pipelines.followup import (
+    MAX_ANSWER_CHARS,
+    condense_question,
+    format_history,
+    needs_context,
+)
 
 HISTORY = [
     {"role": "user", "content": "GCC thành lập năm nào?"},
@@ -35,3 +40,16 @@ def test_format_history_keeps_recent_turns_and_trims_answers():
     text = format_history(messages)
     assert "câu 0" not in text and "câu 4" in text
     assert len(text.splitlines()[-1]) < MAX_ANSWER_CHARS + 20
+
+
+def test_needs_context_skips_only_clear_standalone_questions():
+    assert not needs_context("ProPTIT tuyển thành viên khi nào?")  # có dấu, có CLB, không từ nối
+    assert not needs_context("Muốn liên hệ cả 3 CLB trong S2B thì liên hệ qua đâu?")
+    assert needs_context("còn MPC thì sao?")  # có CLB nhưng có từ nối
+    assert needs_context("thế chủ nhiệm là ai?")  # thiếu chủ thể
+    assert needs_context("proptit tuyen tv khi nao")  # không dấu: luôn hỏi LLM
+    llm = FakeLLM(lambda m: "khác")
+    assert condense_question(llm, "m", HISTORY, "GCC tuyển thành viên khi nào?") == (
+        "GCC tuyển thành viên khi nào?"
+    )
+    assert llm.calls == []  # câu tự đủ nghĩa: không gọi LLM
