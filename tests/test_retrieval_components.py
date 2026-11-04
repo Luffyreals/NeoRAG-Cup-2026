@@ -233,7 +233,9 @@ def test_fuse_scores_max_and_rrf():
     rrf = fuse_scores(matrix, "rrf", rrf_k=0)
     assert rrf[2] == pytest.approx(1 / 2 + 1 / 2)  # hạng 2 ở cả hai câu
     assert rrf[0] == pytest.approx(1 / 1 + 1 / 3)
-    assert fuse_scores([[0.3, 0.7]], "max") == [0.3, 0.7]  # một câu: giữ nguyên
+    assert fuse_scores(matrix, "mix") == pytest.approx([0.5, 0.45, 0.55])
+    for fusion in ("max", "mix"):
+        assert fuse_scores([[0.3, 0.7]], fusion) == [0.3, 0.7]  # một câu: giữ nguyên
     with pytest.raises(ValueError):
         fuse_scores(matrix, "nope")
 

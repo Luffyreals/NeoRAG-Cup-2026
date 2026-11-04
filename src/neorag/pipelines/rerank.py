@@ -29,9 +29,15 @@ def fuse_scores(matrix: list[list[float]], fusion: str = "max", rrf_k: int = 60)
 
     max: điểm cao nhất qua các câu hỏi (doc chỉ cần khớp tốt một ý).
     rrf: cộng 1/(k + hạng) của doc trong xếp hạng theo từng câu hỏi.
+    mix: ½ điểm theo câu đầu (câu đầy đủ) + ½ điểm cao nhất theo các câu còn lại (câu hỏi con),
+    để một câu con khớp mạnh doc khác không một mình đẩy doc đúng của câu một ý xuống.
     """
     if fusion == "max":
         return [max(col) for col in zip(*matrix, strict=True)]
+    if fusion == "mix":
+        if len(matrix) == 1:
+            return list(matrix[0])
+        return [0.5 * col[0] + 0.5 * max(col[1:]) for col in zip(*matrix, strict=True)]
     if fusion == "rrf":
         fused = [0.0] * len(matrix[0])
         for row in matrix:

@@ -74,7 +74,7 @@ class RerankerConfig:
     max_length: int = 512
     query: str = "rewrite"  # rewrite | original: câu đưa vào cross-encoder
     num_threads: int = 0  # số luồng PyTorch trên CPU; 0 = mặc định của PyTorch
-    # none: chấm bằng một câu (`query`); max | rrf: chấm với từng câu viết lại (câu đầy đủ +
+    # none: chấm bằng một câu (`query`); max | rrf | mix: chấm với từng câu viết lại (câu đầy đủ +
     # các câu hỏi con) rồi gộp điểm, để doc trả lời ý phụ của câu nhiều ý không bị đẩy xuống.
     multi_query: str = "none"
 
@@ -158,7 +158,7 @@ class MyPipeline(RAGPipeline):
             config = PipelineConfig.load(config)
         if config.reranker.query not in ("rewrite", "original"):
             raise ValueError(f"reranker.query không hợp lệ: {config.reranker.query!r}")
-        if config.reranker.multi_query not in ("none", "max", "rrf"):
+        if config.reranker.multi_query not in ("none", "max", "rrf", "mix"):
             raise ValueError(f"reranker.multi_query không hợp lệ: {config.reranker.multi_query!r}")
         self.config = config
         self.llm_model = config.llm.model
