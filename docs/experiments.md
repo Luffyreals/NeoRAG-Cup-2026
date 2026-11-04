@@ -68,3 +68,4 @@ Retrieval giữ nguyên exp07 (0.8835). Chấm `--no-judge`: chỉ String Presen
 |---|---|---|---:|---:|---|
 | baseline | — | `BaselinePipeline` (số BTC công bố) | 52.40 | 0 | Ngưỡng = 53.40 |
 | #1 (33066) | 04/11 | `configs/pipeline.toml` = exp07 + generation prompt baseline | 77.99 | 64.56 | Retrieval đã tối ưu, generation chưa. Từ norm suy ra điểm cao nhất bảng xếp hạng lúc nộp ≈ 91.5 |
+| #2 | 04/11 | `configs/pipeline.toml` = exp08 (exp07 + prompt v2) | | | Chờ điểm. Retrieval giống #1 (42/42 câu), câu trả lời trung vị 452 → 258 ký tự, 0 markdown, 5 câu từ chối |

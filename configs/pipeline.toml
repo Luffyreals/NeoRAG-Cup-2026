@@ -2,7 +2,7 @@
 # Đổi file khác bằng biến môi trường NEORAG_PIPELINE_CONFIG=path/to/file.toml
 # (chatbot demo dùng configs/demo.toml: nhanh hơn, retrieval thấp hơn một chút).
 # Mục không ghi lấy giá trị mặc định trong my_pipeline.py (= baseline).
-# Mỗi lựa chọn dưới đây có số liệu trong docs/experiments.md (exp07 là cấu hình này).
+# Mỗi lựa chọn dưới đây có số liệu trong docs/experiments.md (exp08 là cấu hình này).
 
 [llm]
 model = "claude-haiku-5-5"  # model duy nhất được phép dùng trong cuộc thi
@@ -39,5 +39,5 @@ boost = 0.1
 
 [generation]
 enabled = true
-prompt = "baseline"  # tên template trong neorag.pipelines.generation.PROMPTS (Ngày 3 sẽ thay)
+prompt = "v2"  # ngắn, nguyên văn số liệu, không markdown (exp08)
 top_k = 5  # số doc đưa vào prompt
