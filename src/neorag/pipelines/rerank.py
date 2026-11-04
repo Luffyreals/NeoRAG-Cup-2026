@@ -15,13 +15,26 @@ _load_lock = threading.Lock()
 
 
 @lru_cache(maxsize=2)
-def _load(model_name: str, max_length: int):
+def _load(model_name: str, max_length: int, quantize: bool = False):
     _silence_libraries()
     from sentence_transformers import CrossEncoder
 
-    return CrossEncoder(
+    model = CrossEncoder(
         model_name, max_length=max_length, local_files_only=is_downloaded(model_name)
     )
+    if quantize:
+        # int8 động cho các lớp Linear: trên CPU chấm nhanh ~2.2 lần (10 cặp: 2.8 s → 1.25 s),
+        # điểm lệch nhẹ so với fp32 nên phải đo lại retrieval (exp12).
+        import warnings
+
+        import torch
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            torch.quantization.quantize_dynamic(
+                model, {torch.nn.Linear}, dtype=torch.qint8, inplace=True
+            )
+    return model
 
 
 def fuse_scores(matrix: list[list[float]], fusion: str = "max", rrf_k: int = 60) -> list[float]:
@@ -56,10 +69,11 @@ class CrossEncoderReranker:
         batch_size: int = 16,
         max_length: int = 512,
         num_threads: int = 0,
+        quantize: bool = False,
     ):
         self.model_name, self.top_n = model_name, top_n
         self.batch_size, self.max_length = batch_size, max_length
-        self.num_threads = num_threads
+        self.num_threads, self.quantize = num_threads, quantize
         self._lock = threading.Lock()  # bộ chấm gọi từ nhiều luồng
 
     def load(self):
@@ -71,7 +85,7 @@ class CrossEncoderReranker:
                 import torch
 
                 torch.set_num_threads(self.num_threads)
-            return _load(self.model_name, self.max_length)
+            return _load(self.model_name, self.max_length, self.quantize)
 
     @property
     def device(self) -> str:

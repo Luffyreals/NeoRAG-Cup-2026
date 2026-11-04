@@ -91,6 +91,7 @@ class RerankerConfig:
     # none: chấm bằng một câu (`query`); max | rrf | mix: chấm với từng câu viết lại (câu đầy đủ +
     # các câu hỏi con) rồi gộp điểm, để doc trả lời ý phụ của câu nhiều ý không bị đẩy xuống.
     multi_query: str = "none"
+    quantize: bool = False  # int8 động trên CPU: nhanh hơn ~2 lần, điểm lệch nhẹ (exp12)
 
 
 @dataclass
@@ -154,7 +155,7 @@ def build_reranker(cfg: RerankerConfig):
     from neorag.pipelines.rerank import CrossEncoderReranker
 
     return CrossEncoderReranker(
-        cfg.model, cfg.top_n, cfg.batch_size, cfg.max_length, cfg.num_threads
+        cfg.model, cfg.top_n, cfg.batch_size, cfg.max_length, cfg.num_threads, cfg.quantize
     )
 
 
