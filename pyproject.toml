@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-app = ["streamlit>=1.36"]
+app = ["streamlit>=1.36", "fastapi>=0.110", "uvicorn>=0.29"]
 local = ["sentence-transformers>=3.0"]  # embedding/reranker chạy trên máy: scripts/install.py --local
 dev = ["pytest>=8.0", "ruff>=0.6", "pre-commit>=3.7"]
 
