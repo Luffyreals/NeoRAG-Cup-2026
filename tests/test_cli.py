@@ -35,8 +35,15 @@ def offline(monkeypatch, tmp_path):
     monkeypatch.setattr(LLMClient, "chat", _fake_chat)
     monkeypatch.setattr(LLMClient, "embed", _fake_embed)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    # test luồng CLI bằng baseline (nhẹ, đã fake hết API); MyPipeline có test riêng
+    monkeypatch.setattr(cli, "DEFAULT_PIPELINE", "neorag.pipelines.baseline:BaselinePipeline")
     monkeypatch.chdir(tmp_path)
     return tmp_path
+
+
+def test_default_pipeline_is_submission_pipeline():
+    args = cli.build_parser().parse_args(["run", "private_test"])
+    assert args.pipeline == "neorag.pipelines.my_pipeline:MyPipeline"
 
 
 def test_predict_then_evaluate(offline, capsys):
