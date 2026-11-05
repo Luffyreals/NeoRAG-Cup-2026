@@ -1,0 +1,40 @@
+# exp10: cấu hình nộp = exp08 + rerank theo câu hỏi con gộp bằng mix (exp09), có generation.
+
+[llm]
+model = "claude-haiku-5-5"  # model duy nhất được phép dùng trong cuộc thi
+cache_path = ".cache/pipeline.sqlite"
+
+[retrieval]
+method = "hybrid"  # dense (bge-m3 qua gateway) + BM25, gộp bằng RRF (exp03)
+embedding_backend = "gateway"
+embedding_model = "bge-m3"
+n_retrieved = 10  # số doc trả về để chấm retrieval (tối đa 10)
+depth = 30  # mỗi retriever lấy 30 doc trước khi gộp
+rrf_k = 60
+dense_weight = 1.0  # 0.75 tốt hơn khi chưa có reranker (exp05b) nhưng không còn lợi khi có (exp06b)
+bm25_weight = 1.0
+
+[bm25]
+tokenizer = "underthesea"
+fold_accents = true  # kênh âm tiết bỏ dấu cho câu gõ không dấu (exp04)
+
+[rewrite]
+enabled = true  # Haiku thêm dấu, mở rộng viết tắt, tách câu nhiều ý (exp05)
+prompt = "v1"  # đổi prompt thì cache trượt: thêm v2 thay vì sửa v1
+max_queries = 4
+only_unaccented = false  # chỉ viết lại câu không dấu làm tụt điểm (exp05c)
+
+[reranker]
+enabled = true  # cross-encoder local BAAI/bge-reranker-v2-m3 (exp06)
+top_n = 20  # top-10 nhanh hơn nhưng retrieval −0.006 (exp06c)
+num_threads = 4  # i7-12800H: 4 luồng nhanh hơn mặc định 14; đo lại nếu đổi máy
+multi_query = "mix"  # rerank theo từng câu hỏi con (exp09)
+
+[club_boost]
+enabled = true  # ưu tiên mềm doc của CLB được nhắc trong câu hỏi (exp07)
+boost = 0.1
+
+[generation]
+enabled = true
+prompt = "v2"  # ngắn, nguyên văn số liệu, không markdown (exp08)
+top_k = 5  # số doc đưa vào prompt

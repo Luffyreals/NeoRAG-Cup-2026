@@ -39,6 +39,9 @@ from neorag.ui import (
 )
 
 MAX_ERRORS_SHOWN = 15
+# Pipeline nộp bài; baseline của BTC vẫn chạy được bằng
+# --pipeline neorag.pipelines.baseline:BaselinePipeline
+DEFAULT_PIPELINE = "neorag.pipelines.my_pipeline:MyPipeline"
 
 
 def _path(p: str | Path) -> str:
@@ -108,8 +111,12 @@ def _cmd_predict(args: argparse.Namespace) -> int:
             s.detail = f"device: {embedder.device}"
         _check_gpu(embedder.device)
     else:
-        with step("Chuẩn bị pipeline"):
+        with step("Chuẩn bị pipeline") as s:
             pipeline.prepare()
+            if device := getattr(pipeline, "device", None):
+                s.detail = f"device: {device}"
+        if device:
+            _check_gpu(device)
 
     with step(f"Index {len(corpus)} passages"):
         pipeline.index(corpus)
@@ -415,7 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--queries", help="file câu hỏi (mặc định data/<split>/questions.jsonl)")
     p.add_argument(
         "--pipeline",
-        default="neorag.pipelines.baseline:BaselinePipeline",
+        default=DEFAULT_PIPELINE,
         help="pipeline dạng module.path:ClassName",
     )
     p.add_argument("--out", help="file predictions (mặc định outputs/<split>_pred.jsonl)")
@@ -445,7 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--gold", help="file đáp án (mặc định tự tìm theo <split>)")
     r.add_argument(
         "--pipeline",
-        default="neorag.pipelines.baseline:BaselinePipeline",
+        default=DEFAULT_PIPELINE,
         help="pipeline dạng module.path:ClassName",
     )
     r.add_argument("--out", help="file predictions (mặc định outputs/<split>_pred.jsonl)")

@@ -1,0 +1,16 @@
+# Thí nghiệm retrieval (Ngày 2). Mục không ghi lấy mặc định = baseline (xem my_pipeline.py).
+# Chạy: NEORAG_PIPELINE_CONFIG=configs/experiments/<file> neorag run train --no-judge --pipeline neorag.pipelines.my_pipeline:MyPipeline --out outputs/<tên>_pred.jsonl
+
+[retrieval]
+method = "hybrid"
+dense_weight = 0.75  # chiều ngược lại: tăng vai trò BM25 trong RRF
+
+[bm25]
+fold_accents = true
+
+[rewrite]
+enabled = true
+only_unaccented = true  # chỉ viết lại câu gõ không dấu (accent_ratio < 0.2)
+
+[generation]
+enabled = false  # chỉ đo retrieval

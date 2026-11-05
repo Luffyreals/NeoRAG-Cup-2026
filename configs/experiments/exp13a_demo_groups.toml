@@ -1,0 +1,25 @@
+# exp13a: exp12c (cấu hình chatbot) + mỗi câu hỏi con chỉ chấm 6 ứng viên tốt nhất của riêng nó.
+# Chạy: NEORAG_PIPELINE_CONFIG=configs/experiments/<file> neorag run train --no-judge --pipeline neorag.pipelines.my_pipeline:MyPipeline --out outputs/<tên>_pred.jsonl
+
+[retrieval]
+method = "hybrid"
+
+[bm25]
+fold_accents = true
+
+[rewrite]
+enabled = true
+
+[reranker]
+enabled = true
+top_n = 10
+num_threads = 4
+quantize = true  # int8 động
+multi_query = "max"  # rerank theo từng câu hỏi con như cấu hình benchmark
+sub_query_k = 6  # câu đầy đủ chấm top-10 sau khi gộp, mỗi câu con chấm 6 ứng viên của riêng nó
+
+[club_boost]
+enabled = true
+
+[generation]
+enabled = false  # chỉ đo retrieval

@@ -28,3 +28,9 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Cấu hình công cụ cá nhân (không commit)
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
