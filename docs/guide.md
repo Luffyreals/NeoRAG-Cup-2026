@@ -136,6 +136,8 @@ $env:NEORAG_PIPELINE="my_solution.pipeline:MyPipeline"; python -m streamlit run 
 
 Dùng `python -m streamlit` thay cho `streamlit` để chatbot chạy bằng đúng Python của môi trường đã kích hoạt. Chatbot dùng trong buổi pitching do thí sinh tự xây dựng và được đánh giá ở tiêu chí Demo Product.
 
+Chatbot chính của bài này là bản web FastAPI trong `app/server.py` (chạy `python app/server.py`, mở http://127.0.0.1:8000), dùng cùng `MyPipeline`. Bản Streamlit ở trên là phương án dự phòng. Kịch bản demo xem [demo.md](demo.md).
+
 ## 7. Tạo file nộp bài
 
 ```bash

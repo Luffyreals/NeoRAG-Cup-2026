@@ -39,6 +39,9 @@ from neorag.ui import (
 )
 
 MAX_ERRORS_SHOWN = 15
+# Pipeline nộp bài; baseline của BTC vẫn chạy được bằng
+# --pipeline neorag.pipelines.baseline:BaselinePipeline
+DEFAULT_PIPELINE = "neorag.pipelines.my_pipeline:MyPipeline"
 
 
 def _path(p: str | Path) -> str:
@@ -419,7 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--queries", help="file câu hỏi (mặc định data/<split>/questions.jsonl)")
     p.add_argument(
         "--pipeline",
-        default="neorag.pipelines.baseline:BaselinePipeline",
+        default=DEFAULT_PIPELINE,
         help="pipeline dạng module.path:ClassName",
     )
     p.add_argument("--out", help="file predictions (mặc định outputs/<split>_pred.jsonl)")
@@ -449,7 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--gold", help="file đáp án (mặc định tự tìm theo <split>)")
     r.add_argument(
         "--pipeline",
-        default="neorag.pipelines.baseline:BaselinePipeline",
+        default=DEFAULT_PIPELINE,
         help="pipeline dạng module.path:ClassName",
     )
     r.add_argument("--out", help="file predictions (mặc định outputs/<split>_pred.jsonl)")

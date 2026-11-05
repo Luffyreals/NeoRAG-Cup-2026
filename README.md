@@ -6,82 +6,135 @@
 
 </div>
 
-NeoRAG Cup 2026 là cuộc thi nội bộ do Team AI – CLB Lập Trình PTIT tổ chức. Thí sinh thiết kế và triển khai một hệ thống Retrieval-Augmented Generation (RAG) trả lời câu hỏi về cộng đồng S2B, gồm CLB Lập Trình PTIT (ProPTIT), CLB Multimedia PTIT (MPC) và CLB Nhà Sáng Tạo Game PTIT (GCC), sau đó trình bày sản phẩm trước Ban giám khảo.
+Bài dự thi **NeoRAG Cup 2026**: hệ thống RAG trả lời câu hỏi tiếng Việt về cộng đồng S2B (CLB Lập Trình PTIT, CLB Multimedia PTIT, CLB Nhà Sáng Tạo Game PTIT). Hệ thống chỉ dựa trên 118 tài liệu của cuộc thi. Mỗi câu trả lời đều kèm nguồn, và khi tài liệu không có thông tin thì hệ thống từ chối trả lời.
 
-Repository này cung cấp bộ dữ liệu, pipeline baseline, bộ chấm chính thức và một chatbot mẫu để tham khảo. Hướng dẫn cài đặt và sử dụng có trong tài liệu [Hướng dẫn sử dụng](docs/guide.md).
+Repo gồm hai phần:
 
-## Tổng quan
+- **Pipeline** `neorag.pipelines.my_pipeline:MyPipeline` dùng để chấm benchmark (Public/Private Test).
+- **Chatbot web** (FastAPI + SSE) dùng chung pipeline đó để demo.
 
-| Hạng mục | Chi tiết |
-|---|---|
-| Hình thức | Thi cá nhân |
-| Đối tượng | Thành viên Team AI – CLB Lập Trình PTIT |
-| Thời gian | 19/10/2026 – 09/11/2026 |
-| Mô hình ngôn ngữ | `claude-haiku-5-5`, truy cập qua gateway của Ban tổ chức bằng key cá nhân |
-| Hệ thống chấm | [aichallenge.ptit.edu.vn](https://aichallenge.ptit.edu.vn/) |
-| Trang cuộc thi | [bit.ly/neorag2026](https://bit.ly/neorag2026) |
+## Kết quả
+
+| | Retrieval | Generation | Score |
+|---|---:|---:|---:|
+| Baseline của BTC (Public Test) | | | 52.40 |
+| **Public Test, bài nộp cuối** | **88.55** | **83.77** | **86.14** |
+| Train, 126 câu, chấm đủ judge | 89.92 | 84.76 | 87.34 |
+
+Mọi thí nghiệm, kể cả các hướng không chọn, đều có số đo và lý do trong [docs/experiments.md](docs/experiments.md). Phân tích lỗi baseline (điểm xuất phát) nằm ở [docs/error_analysis.md](docs/error_analysis.md).
+
+## Kiến trúc
+
+```mermaid
+flowchart LR
+    Q[Câu hỏi] --> RW["Viết lại câu hỏi<br/>(Haiku: thêm dấu, mở rộng viết tắt,<br/>tách câu nhiều ý)"]
+    RW --> D["Dense bge-m3<br/>(gateway)"]
+    RW --> B["BM25 underthesea<br/>+ kênh bỏ dấu"]
+    D --> F[Gộp RRF, top-30 mỗi kênh]
+    B --> F
+    F --> R["Cross-encoder bge-reranker-v2-m3<br/>chấm theo từng câu hỏi con, lấy max"]
+    R --> C[Ưu tiên mềm CLB được nhắc]
+    C --> T[Top-10 doc → retrieved_ids]
+    C --> G["Sinh câu trả lời (Haiku, prompt v2)<br/>top-5 doc, chép nguyên số liệu,<br/>từ chối khi không có thông tin"]
+    G --> A[Câu trả lời]
+```
+
+| Bước | Module | Lý do chọn (mã thí nghiệm) |
+|---|---|---|
+| Hybrid dense + BM25, gộp RRF | [retrieval.py](src/neorag/pipelines/retrieval.py) | BM25 bắt được tên riêng và số liệu mà dense bỏ sót (exp03) |
+| Kênh BM25 bỏ dấu | [vietnamese.py](src/neorag/pipelines/vietnamese.py) | Xử lý câu gõ không dấu. Retrieval +0.048 (exp04) |
+| Viết lại câu hỏi | [rewrite.py](src/neorag/pipelines/rewrite.py) | Thêm dấu, tách câu nhiều ý thành câu hỏi con. +0.030 (exp05) |
+| Reranker local | [rerank.py](src/neorag/pipelines/rerank.py) | +0.064 (exp06) |
+| Rerank theo câu hỏi con, lấy max | [rerank.py](src/neorag/pipelines/rerank.py) | Public có nhiều câu nhiều ý. Retrieval Public 80.1 → 88.6 (exp09) |
+| Ưu tiên CLB | [clubs.py](src/neorag/pipelines/clubs.py) | Giảm nhầm doc của CLB khác. +0.017 (exp07) |
+| Prompt v2 | [generation.py](src/neorag/pipelines/generation.py) | Ngắn, chép nguyên văn, không markdown. Public +2.11 điểm (exp08) |
+| Hiểu câu hỏi nối tiếp (chỉ chatbot) | [followup.py](src/neorag/pipelines/followup.py) | Viết lại "Ai là người sáng lập?" thành câu đầy đủ dựa trên lịch sử chat |
+
+Mọi bước LLM đều dùng `claude-haiku-5-5` qua gateway, đúng quy định. Cấu hình nằm trong [configs/pipeline.toml](configs/pipeline.toml) (benchmark) và [configs/demo.toml](configs/demo.toml) (chatbot). Bản chatbot rerank ít ứng viên hơn và dùng int8 nên nhanh hơn khoảng 5 lần, retrieval chỉ kém 0.003 (exp12c).
+
+## Cài đặt
+
+Cần Python 3.10+.
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate              # macOS/Linux: source .venv/bin/activate
+python scripts/install.py --local   # --local cài thêm PyTorch + sentence-transformers cho reranker
+copy .env.example .env              # macOS/Linux: cp .env.example .env
+```
+
+Mở `.env` và điền key gateway của bạn. Lần chạy đầu sẽ tải model `BAAI/bge-reranker-v2-m3` (khoảng 2 GB) từ Hugging Face. Xem thêm ở [Hướng dẫn sử dụng](docs/guide.md).
+
+## Chạy pipeline
+
+CLI mặc định chạy `MyPipeline` (`--pipeline neorag.pipelines.baseline:BaselinePipeline` để chạy baseline của BTC). Các lệnh dưới đây vẫn ghi rõ `--pipeline` để log in đúng pipeline đã dùng:
+
+```bash
+neorag run train --no-judge --pipeline neorag.pipelines.my_pipeline:MyPipeline     # dự đoán + chấm nhanh (không tốn tiền judge)
+neorag run train --pipeline neorag.pipelines.my_pipeline:MyPipeline                # chấm đủ, có LLM judge
+neorag run public_test --pipeline neorag.pipelines.my_pipeline:MyPipeline          # tạo outputs/public_test_pred.jsonl + public_test_submission.zip
+neorag run private_test --pipeline neorag.pipelines.my_pipeline:MyPipeline         # ngày 08/11
+neorag validate public_test                                                         # kiểm tra file nộp
+```
+
+Báo cáo chấm nằm ở `outputs/eval_<tên>/` (`report.md`, `per_query.jsonl`). Muốn đổi cấu hình thì đặt biến `NEORAG_PIPELINE_CONFIG=path/to/file.toml`. Các cấu hình thí nghiệm nằm trong [configs/experiments/](configs/experiments/).
+
+## Chạy chatbot
+
+```bash
+python app/server.py            # mở http://127.0.0.1:8000
+```
+
+Đợi đến khi terminal in `Uvicorn running`, vì lúc khởi động server phải nạp model và dựng index. Tính năng chính:
+
+- Trả lời dạng streaming. Nguồn hiện ra ngay khi truy xuất xong, trước khi model viết xong.
+- Bấm vào chip nguồn để xem đoạn tài liệu đã đưa vào prompt.
+- Hiểu câu hỏi nối tiếp.
+- Panel hiệu năng ghi thời gian từng bước.
+- Lịch sử chat lưu trong trình duyệt.
+- Báo lỗi gateway, mạng, hết hạn mức bằng câu dễ hiểu, kèm nút Thử lại.
+
+Phương án dự phòng là bản Streamlit dùng cùng pipeline:
+
+```bash
+python -m streamlit run app/chat.py
+```
+
+Kịch bản demo, số đo latency và cách xử lý sự cố có trong [docs/demo.md](docs/demo.md).
+
+## Kiểm thử
+
+```bash
+pytest                          # dùng FakeLLM/FakeEmbedder, không gọi API
+ruff check .
+```
+
+## Cấu trúc thư mục
+
+```
+app/                 chatbot: server.py (FastAPI), static/ (giao diện), chat.py (Streamlit)
+configs/             pipeline.toml, demo.toml, experiments/, eval.toml (của BTC, không sửa)
+src/neorag/
+  pipelines/         my_pipeline.py và các module retrieval, rerank, rewrite, generation, followup
+  metrics/, evaluate.py   bộ chấm chính thức của BTC
+  llm.py             client gateway + cache SQLite
+scripts/             install.py, compare_runs.py (so từng câu giữa 2 lần chạy), relevancy_only.py
+docs/                experiments.md, error_analysis.md, demo.md, gitflow.md + tài liệu cuộc thi
+tests/
+```
 
 ## Tài liệu
 
 | Tài liệu | Nội dung |
 |---|---|
-| [Hướng dẫn sử dụng](docs/guide.md) | Cài đặt môi trường, cấu hình key, chạy baseline, xây dựng pipeline và tạo bài nộp |
-| [Sử dụng gateway](docs/gateway.md) | Kết nối tới mô hình ngôn ngữ và embedding của cuộc thi, tra cứu ngân sách, giới hạn và mã lỗi |
-| [Quy định](docs/rules.md) | Mô hình được phép sử dụng, key và ngân sách, các hành vi bị cấm, xử lý vi phạm |
-| [Nộp bài](docs/submission.md) | Định dạng bài nộp, quy trình nộp Public Test và Private Test |
-| [Nộp bài trên aichallenge](docs/aichallenge.md) | Tạo tài khoản, đăng ký cuộc thi, nộp bài, đọc kết quả và xử lý lỗi trên hệ thống chấm |
-| [Đánh giá](docs/evaluation.md) | Định nghĩa các metric, công thức tính điểm và cách quy đổi theo baseline |
-| [Dữ liệu](data/README.md) | Mô tả corpus, bộ câu hỏi, nguồn và mức độ xác minh |
-| [Quy trình Git](docs/gitflow.md) | Mô hình nhánh `main` / `develop` / `feature/*` và quy ước commit |
-
-## Lịch trình
-
-| Giai đoạn | Thời gian | Nội dung |
-|---|---|---|
-| Khởi động | 19/10 – 25/10 | Công bố thể lệ, cấp repository và key cho thí sinh |
-| Public Test | 26/10 – 07/11 | Nộp bài và theo dõi bảng xếp hạng công khai; tổ chức talkshow chia sẻ kinh nghiệm |
-| Private Test | 08/11 | Đánh giá trên bộ câu hỏi mới; kết quả dùng để tính điểm Benchmark |
-| Pitching | Thông báo sau | 20 phút trình bày và demo, 10 phút hỏi đáp với Ban giám khảo |
-
-## Yêu cầu sản phẩm
-
-Mỗi thí sinh hoàn thành các hạng mục sau:
-
-1. Pipeline RAG hoàn chỉnh, từ xử lý dữ liệu, indexing, truy xuất đến sinh câu trả lời.
-2. Bài nộp Public Test và Private Test trên hệ thống chấm.
-3. Giao diện chatbot hỏi đáp thông tin các CLB, xây dựng bằng công nghệ tùy chọn.
-4. Bài trình bày về kiến trúc, các quyết định kỹ thuật và kết quả đánh giá, kèm demo tại buổi pitching.
-
-## Đánh giá
-
-| Tiêu chí | Trọng số | Nội dung đánh giá |
-|---|---:|---|
-| Benchmark | 40% | Kết quả trên Private Test, chấm bằng bộ chấm chính thức |
-| Pitching | 25% | Mức độ hiểu sản phẩm, khả năng giải thích các quyết định kỹ thuật, trình bày và trả lời câu hỏi |
-| Technical | 20% | Kiến trúc hệ thống, quản lý mã nguồn với Git, chất lượng và cách tổ chức code |
-| Demo Product | 15% | Giao diện, tốc độ phản hồi và trải nghiệm người dùng |
-
-Điểm Benchmark đánh giá đồng thời chất lượng truy xuất và chất lượng câu trả lời, mỗi phần chiếm một nửa. Điểm trên bảng xếp hạng được quy đổi theo baseline của Ban tổ chức: bài nộp không vượt ngưỡng (điểm baseline cộng 1) nhận 0 điểm, bài nộp cao nhất nhận 100 điểm. Kết quả chung cuộc chỉ tính theo Private Test; Public Test dùng để thử nghiệm. Chi tiết xem tài liệu [Đánh giá](docs/evaluation.md).
-
-## Giải thưởng
-
-| Giải | Giá trị |
-|---|---:|
-| Giải Nhất | 200.000 VNĐ |
-| Giải Nhì | 150.000 VNĐ |
-| Giải Ba | 100.000 VNĐ |
-| Giải Tiềm năng | 50.000 VNĐ |
-
-Mỗi giải thưởng kèm giấy chứng nhận của Ban tổ chức.
-
-## Liên hệ
-
-Mọi thắc mắc về cuộc thi xin liên hệ Ban tổ chức.
-
-| Người phụ trách | Email | Facebook |
-|---|---|---|
-| Hoàng Đỗ | [dekthedev.business@gmail.com](mailto:dekthedev.business@gmail.com) | [fb.com/dekthedev](http://fb.com/dekthedev) |
+| [Bảng thí nghiệm](docs/experiments.md) | Ablation từng bước, kết quả các lần nộp Public |
+| [Phân tích lỗi](docs/error_analysis.md) | Lỗi của baseline trên train, điểm xuất phát cho các cải tiến |
+| [Kịch bản demo](docs/demo.md) | Chạy chatbot, checklist trước pitching, xử lý sự cố |
+| [Quy trình Git](docs/gitflow.md) | Nhánh `main` / `develop` / `feature/*`, quy ước commit |
+| [Hướng dẫn sử dụng](docs/guide.md), [Gateway](docs/gateway.md) | Cài đặt, key, gateway của BTC |
+| [Quy định](docs/rules.md), [Đánh giá](docs/evaluation.md), [Nộp bài](docs/submission.md) | Thể lệ cuộc thi |
+| [Dữ liệu](data/README.md) | Corpus và bộ câu hỏi |
 
 ## Giấy phép
 
-Mã nguồn được phát hành theo [giấy phép MIT](LICENSE). Bộ dữ liệu chỉ được sử dụng cho mục đích học tập trong khuôn khổ NeoRAG Cup 2026; bản quyền nội dung gốc thuộc về các CLB và các nguồn được ghi trong `data/sources.csv`.
+Mã nguồn phát hành theo [giấy phép MIT](LICENSE). Starter kit và bộ chấm do Team AI, CLB Lập Trình PTIT cung cấp. Bộ dữ liệu chỉ dùng cho mục đích học tập trong khuôn khổ NeoRAG Cup 2026, bản quyền nội dung gốc thuộc về các CLB và các nguồn ghi trong `data/sources.csv`.
