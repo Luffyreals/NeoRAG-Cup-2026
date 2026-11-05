@@ -87,6 +87,8 @@ Báo cáo chấm nằm ở `outputs/eval_<tên>/` (`report.md`, `per_query.jsonl
 python app/server.py            # mở http://127.0.0.1:8000
 ```
 
+Muốn mở từ điện thoại hoặc máy khác cùng mạng Wi-Fi thì chạy `$env:HOST="0.0.0.0"; python app/server.py` (macOS/Linux: `HOST=0.0.0.0 python app/server.py`), rồi vào `http://<IP máy chạy server>:8000`. IP xem bằng `ipconfig`, dòng IPv4 ở mục "Wi-Fi". Ai vào được trang cũng dùng key gateway của bạn, nên chỉ bật khi demo.
+
 Đợi đến khi terminal in `Uvicorn running`, vì lúc khởi động server phải nạp model và dựng index. Tính năng chính:
 
 - Trả lời dạng streaming. Nguồn hiện ra ngay khi truy xuất xong, trước khi model viết xong.
