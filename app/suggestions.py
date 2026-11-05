@@ -122,7 +122,3 @@ SUGGESTIONS: dict[str, dict[str, list[str]]] = {
         "Quan hệ giữa các CLB": ["GCC liên quan thế nào với cộng đồng S2B?"],
     },
 }
-
-
-def all_questions() -> list[str]:
-    return [q for topics in SUGGESTIONS.values() for qs in topics.values() for q in qs]
