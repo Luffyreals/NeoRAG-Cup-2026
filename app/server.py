@@ -242,4 +242,6 @@ if STATIC_DIR.exists():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=int(os.getenv("PORT", "8000")))
+    # Mặc định chỉ máy này truy cập được. HOST=0.0.0.0 mở cho máy khác cùng mạng (điện thoại, máy BGK):
+    # ai vào được trang cũng dùng key gateway của mình, nên chỉ bật khi demo.
+    uvicorn.run(app, host=os.getenv("HOST", "127.0.0.1"), port=int(os.getenv("PORT", "8000")))

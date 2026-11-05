@@ -9,6 +9,7 @@ Tài liệu dùng cho phần Demo Product (UI/UX, độ trễ, trải nghiệm) 
 python app/server.py            # mở http://127.0.0.1:8000
 ```
 
+- Cho BGK hoặc điện thoại truy cập: `$env:HOST="0.0.0.0"; python app/server.py`, mở `http://<IP máy>:8000` (IP: `ipconfig`, dòng IPv4 ở mục "Wi-Fi"; máy có VMware/VirtualBox sẽ hiện thêm IP khác, bỏ qua). Windows Firewall có thể hỏi cho phép Python: chọn **Private network**.
 - Dùng cùng pipeline và cấu hình `configs/demo.toml` với bản Streamlit (reranker top-10, int8).
 - Đổi pipeline: `NEORAG_PIPELINE="module:Class"`; đổi cấu hình: `NEORAG_CHAT_CONFIG=...`.
 - **Phương án dự phòng:** `python -m streamlit run app/chat.py` (giao diện cũ, cùng pipeline).
