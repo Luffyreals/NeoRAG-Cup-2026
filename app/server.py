@@ -215,13 +215,26 @@ def info() -> dict:
     }
 
 
+# Không có Cache-Control, trình duyệt tự đoán thời hạn cache và có thể ghép index.html cũ
+# với app.js mới sau khi sửa giao diện. "no-cache" = vẫn cache nhưng hỏi lại server mỗi lần
+# (dựa vào ETag, file không đổi thì server chỉ trả 304, gần như không tốn gì).
+NO_CACHE = {"Cache-Control": "no-cache"}
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers.update(NO_CACHE)
+        return response
+
+
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(STATIC_DIR / "index.html", headers=NO_CACHE)
 
 
 if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/static", RevalidatedStaticFiles(directory=STATIC_DIR), name="static")
 
 
 if __name__ == "__main__":
