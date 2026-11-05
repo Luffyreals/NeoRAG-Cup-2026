@@ -35,6 +35,7 @@ from neorag.data import load_corpus
 from neorag.pipelines import load_pipeline
 from neorag.pipelines.followup import condense_question, needs_context
 from neorag.pipelines.retrieval import ScoredDoc
+from suggestions import SUGGESTIONS  # app/suggestions.py (chạy bằng `python app/server.py`)
 
 PIPELINE = os.getenv("NEORAG_PIPELINE", "neorag.pipelines.my_pipeline:MyPipeline")
 # Như app/chat.py: không để NEORAG_PIPELINE_CONFIG còn sót từ thí nghiệm làm chatbot chạy sai cấu hình.
@@ -212,16 +213,30 @@ def info() -> dict:
         "config": os.path.basename(os.environ["NEORAG_PIPELINE_CONFIG"]),
         "llm": config.llm.model if config is not None else None,
         "clubs": CLUB_LABELS,
+        "suggestions": SUGGESTIONS,  # gợi ý "hỏi tiếp" theo CLB + chủ đề của nguồn
     }
+
+
+# Không có Cache-Control, trình duyệt tự đoán thời hạn cache và có thể ghép index.html cũ
+# với app.js mới sau khi sửa giao diện. "no-cache" = vẫn cache nhưng hỏi lại server mỗi lần
+# (dựa vào ETag, file không đổi thì server chỉ trả 304, gần như không tốn gì).
+NO_CACHE = {"Cache-Control": "no-cache"}
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers.update(NO_CACHE)
+        return response
 
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(STATIC_DIR / "index.html", headers=NO_CACHE)
 
 
 if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/static", RevalidatedStaticFiles(directory=STATIC_DIR), name="static")
 
 
 if __name__ == "__main__":
