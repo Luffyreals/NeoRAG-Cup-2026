@@ -35,6 +35,7 @@ from neorag.data import load_corpus
 from neorag.pipelines import load_pipeline
 from neorag.pipelines.followup import condense_question, needs_context
 from neorag.pipelines.retrieval import ScoredDoc
+from suggestions import SUGGESTIONS  # app/suggestions.py (chạy bằng `python app/server.py`)
 
 PIPELINE = os.getenv("NEORAG_PIPELINE", "neorag.pipelines.my_pipeline:MyPipeline")
 # Như app/chat.py: không để NEORAG_PIPELINE_CONFIG còn sót từ thí nghiệm làm chatbot chạy sai cấu hình.
@@ -212,6 +213,7 @@ def info() -> dict:
         "config": os.path.basename(os.environ["NEORAG_PIPELINE_CONFIG"]),
         "llm": config.llm.model if config is not None else None,
         "clubs": CLUB_LABELS,
+        "suggestions": SUGGESTIONS,  # gợi ý "hỏi tiếp" theo CLB + chủ đề của nguồn
     }
 
 
