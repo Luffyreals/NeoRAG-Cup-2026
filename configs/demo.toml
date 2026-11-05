@@ -1,5 +1,5 @@
 # Cấu hình cho chatbot demo: như configs/pipeline.toml nhưng rerank ít ứng viên hơn để trả lời nhanh.
-# Chạy: $env:NEORAG_PIPELINE_CONFIG="configs/demo.toml"; $env:NEORAG_PIPELINE="neorag.pipelines.my_pipeline:MyPipeline"; python -m streamlit run app/chat.py
+# app/server.py và app/chat.py tự dùng file này (đổi bằng NEORAG_CHAT_CONFIG). Chạy: python app/server.py
 # exp06c: top_n 10 + 4 luồng: latency median 11 s → 4.2 s, retrieval −0.006 so với top_n 20.
 # exp12c: + int8 + rerank theo câu hỏi con: retrieval 0.8773 → 0.8961, latency median giữ 3.8 s.
 
