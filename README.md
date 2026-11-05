@@ -8,6 +8,8 @@
 
 Bài dự thi **NeoRAG Cup 2026**: hệ thống RAG trả lời câu hỏi tiếng Việt về cộng đồng S2B (CLB Lập Trình PTIT, CLB Multimedia PTIT, CLB Nhà Sáng Tạo Game PTIT). Hệ thống chỉ dựa trên 118 tài liệu của cuộc thi. Mỗi câu trả lời đều kèm nguồn, và khi tài liệu không có thông tin thì hệ thống từ chối trả lời.
 
+**Trang giới thiệu:** https://luffyreals.github.io/NeoRAG-Cup-2026/
+
 Repo gồm hai phần:
 
 - **Pipeline** `neorag.pipelines.my_pipeline:MyPipeline` dùng để chấm benchmark (Public/Private Test).
