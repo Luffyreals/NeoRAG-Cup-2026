@@ -20,7 +20,7 @@ Repo gồm hai phần:
 | | Retrieval | Generation | Score |
 |---|---:|---:|---:|
 | Baseline của BTC (Public Test) | | | 52.40 |
-| **Public Test, bài nộp cuối** | **88.55** | **83.77** | **86.14** |
+| **Public Test, bài nộp cuối** | **88.55** | **83.80** | **86.17** |
 | Train, 126 câu, chấm đủ judge | 89.92 | 84.76 | 87.34 |
 
 Mọi thí nghiệm, kể cả các hướng không chọn, đều có số đo và lý do trong [docs/experiments.md](docs/experiments.md). Phân tích lỗi baseline (điểm xuất phát) nằm ở [docs/error_analysis.md](docs/error_analysis.md).
