@@ -105,6 +105,7 @@ Retrieval giữ nguyên exp07 (0.8835). Chấm `--no-judge`: chỉ String Presen
 | #3 (33096) | 04/11 | exp10 max = exp08 + rerank theo câu hỏi con, gộp **max** | 86.16 | **82.27** | Retrieval 80.09 → **88.55** (Recall@5 81.75 → 89.52, MRR@5 81.63 → 90.28). Generation 83.77. Cấu hình chọn |
 | #4 (33097) | 04/11 | exp10 mix = exp08 + rerank theo câu hỏi con, gộp **mix** | 84.69 | 78.58 | Retrieval 86.15, generation 83.23. Đúng dự đoán: Public nhiều câu nhiều ý nên max hơn mix |
 | #5 | 04/11 | Nộp lại đúng file của #3 (exp10 max) | 86.14 | — | Bảng xếp hạng lấy **lần nộp cuối**, không phải lần cao nhất, nên phải nộp lại để thay điểm của #4. Chỉ Response Relevancy đổi (59.96 → 59.64, judge sinh câu hỏi lại mỗi lần chấm); các metric khác giống hệt #3. Nhiễu judge giữa hai lần chấm cùng một file ≈ 0.02 điểm |
+| **#6 (33245)** | **07/11** | **Nộp lại đúng file exp10 max** | **86.17** | **81.72** | Retrieval 88.55 (giống #3/#5). Generation 83.80: String Presence 87.61, Relevancy 60.10 (+0.46 so với #5), Groundedness 100.00, 1 − Noise 95.30, Abstention 100.00. Nhiễu judge ≈ 0.03 điểm. **Bài nộp cuối cùng trên Public** |
 
 Chi tiết điểm (log chấm của trang thi) so với train (exp08, chấm judge):
 
@@ -117,6 +118,7 @@ Chi tiết điểm (log chấm của trang thi) so với train (exp08, chấm ju
 | Public #3 (max) | 0.8952 | 0.9028 | 0.8585 | **0.8855** | 0.8761 | 0.5978 | 1.0000 | 0.5996 | 0.9530 | 1.0000 | 0.8377 |
 | Public #4 (mix) | 0.8635 | 0.8897 | 0.8313 | 0.8615 | 0.8889 | 0.6123 | 0.9701 | 0.5996 | 0.9231 | 1.0000 | 0.8323 |
 | Public #5 (= #3) | 0.8952 | 0.9028 | 0.8585 | 0.8855 | 0.8761 | 0.5978 | 1.0000 | 0.5964 | 0.9530 | 1.0000 | 0.8372 |
+| **Public #6 (= #3)** | 0.8952 | 0.9028 | 0.8585 | 0.8855 | 0.8761 | 0.5978 | 1.0000 | 0.6010 | 0.9530 | 1.0000 | **0.8380** |
 
 #1 → #2 (chỉ đổi prompt): ROUGE-L +0.140, 1 − Noise +0.063, Relevancy +0.026, String Presence +0.017, Groundedness +0.008; generation +0.042, khớp với hướng tăng trên train. Retrieval trên Public thấp hơn train 0.083 (Recall@5 −0.11), lớn hơn mức chênh của generation (−0.043). Không phải do câu không dấu: trên train, nhóm câu không dấu có retrieval 0.896 (26 câu), còn cao hơn nhóm có dấu 0.880 (96 câu). Nhiều khả năng do cấu hình được chọn trên train (overfit) và câu hỏi Public khác phân bố. Mỗi 0.01 retrieval = 0.5 điểm tổng, còn mỗi 0.01 của một metric generation chỉ = 0.083 điểm, nên retrieval là đòn bẩy lớn hơn.
 
