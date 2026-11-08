@@ -17,7 +17,7 @@ from neorag.data import Document
 from neorag.llm import LLMClient
 from neorag.pipelines.base import RAGOutput, RAGPipeline
 from neorag.pipelines.baseline import GatewayEmbedder
-from neorag.pipelines.clubs import boost_clubs, detect_clubs
+from neorag.pipelines.clubs import boost_clubs, detect_clubs, filter_rewrites
 from neorag.pipelines.generation import Generator
 from neorag.pipelines.retrieval import HybridRetriever, ScoredDoc, build_retriever, rrf_fuse
 from neorag.pipelines.rewrite import QueryRewriter
@@ -241,6 +241,7 @@ class MyPipeline(RAGPipeline):
         cfg = self.config
         with timed(timings, "rewrite"):
             rewrites = self.rewriter.rewrite(query) if self.should_rewrite(query) else []
+            rewrites = filter_rewrites(query, rewrites)
         with timed(timings, "search"):
             rankings, weights = [], []
             per_query = {}  # xếp hạng riêng của từng câu, cho rerank theo nhóm (sub_query_k)
@@ -267,7 +268,10 @@ class MyPipeline(RAGPipeline):
                 else:
                     hits = self.reranker.rerank(rewrites[0] if use_rewrite else query, hits)
         if cfg.club_boost.enabled:
-            hits = boost_clubs(hits, detect_clubs(query, *rewrites), cfg.club_boost.boost)
+            q_text = " ".join([query] + rewrites[:1])
+            hits = boost_clubs(
+                hits, detect_clubs(query, *rewrites), cfg.club_boost.boost, query_text=q_text
+            )
         return hits[: cfg.retrieval.n_retrieved]
 
     def run(self, query: str, timings: dict[str, float] | None = None) -> RAGOutput:
