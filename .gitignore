@@ -5,8 +5,6 @@
 
 # Đáp án Public/Private Test chỉ BTC giữ
 data/*/gold.jsonl
-# Đề Private Test phát hành ngày 08/11; trước đó không commit (BTC dùng git add -f khi phát hành)
-data/private_test/questions.jsonl
 
 # Output, cache
 outputs/
