@@ -20,8 +20,9 @@ Repo gồm hai phần:
 | | Retrieval | Generation | Score |
 |---|---:|---:|---:|
 | Baseline của BTC (Public Test) | | | 52.40 |
-| **Public Test, bài nộp cuối** | **88.55** | **83.80** | **86.17** |
-| Train, 126 câu, chấm đủ judge | 89.92 | 84.76 | 87.34 |
+| Public Test, bài nộp cuối | 88.55 | 83.80 | 86.17 |
+| **Private Test, bài nộp cuối** | **93.40** | **82.65** | **88.03** |
+| Train, 126 câu, chấm đủ judge | 93.75 | 86.17 | 89.96 |
 
 Mọi thí nghiệm, kể cả các hướng không chọn, đều có số đo và lý do trong [docs/experiments.md](docs/experiments.md). Phân tích lỗi baseline (điểm xuất phát) nằm ở [docs/error_analysis.md](docs/error_analysis.md).
 
@@ -48,8 +49,8 @@ flowchart LR
 | Viết lại câu hỏi | [rewrite.py](src/neorag/pipelines/rewrite.py) | Thêm dấu, tách câu nhiều ý thành câu hỏi con. +0.030 (exp05) |
 | Reranker local | [rerank.py](src/neorag/pipelines/rerank.py) | +0.064 (exp06) |
 | Rerank theo câu hỏi con, lấy max | [rerank.py](src/neorag/pipelines/rerank.py) | Public có nhiều câu nhiều ý. Retrieval Public 80.1 → 88.6 (exp09) |
-| Ưu tiên CLB | [clubs.py](src/neorag/pipelines/clubs.py) | Giảm nhầm doc của CLB khác. +0.017 (exp07) |
-| Prompt v2 | [generation.py](src/neorag/pipelines/generation.py) | Ngắn, chép nguyên văn, không markdown. Public +2.11 điểm (exp08) |
+| Ưu tiên CLB & chủ đề/nhiệm kỳ | [clubs.py](src/neorag/pipelines/clubs.py) | Mở rộng viết tắt (`mm`, `dpt`), lọc rewrite lệch CLB, ưu tiên nhiệm kỳ/năm/giải thưởng/liên hệ và hạ doc nhiễu (`1`, `60`). Private Retrieval 85.5 → 93.4 (exp07, exp19–20) |
+| Prompt v2 + hậu xử lý câu trả lời | [generation.py](src/neorag/pipelines/generation.py) | Ngắn, chép nguyên văn, không markdown; đưa mệnh đề từ chối lên đầu và cắt câu bình luận thừa giảm Noise Sensitivity (exp08, exp19–20) |
 | Hiểu câu hỏi nối tiếp (chỉ chatbot) | [followup.py](src/neorag/pipelines/followup.py) | Viết lại "Ai là người sáng lập?" thành câu đầy đủ dựa trên lịch sử chat |
 
 Mọi bước LLM đều dùng `claude-haiku-5-5` qua gateway, đúng quy định. Cấu hình nằm trong [configs/pipeline.toml](configs/pipeline.toml) (benchmark) và [configs/demo.toml](configs/demo.toml) (chatbot). Bản chatbot rerank ít ứng viên hơn và dùng int8 nên nhanh hơn khoảng 5 lần, retrieval chỉ kém 0.003 (exp12c).

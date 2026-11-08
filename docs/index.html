@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NeoRAG · Hỏi đáp cộng đồng S2B</title>
-  <meta name="description" content="Hệ thống RAG trả lời câu hỏi tiếng Việt về cộng đồng S2B (ProPTIT, MPC, GCC). Bài dự thi NeoRAG Cup 2026: 86.17 điểm Public Test.">
+  <meta name="description" content="Hệ thống RAG trả lời câu hỏi tiếng Việt về cộng đồng S2B (ProPTIT, MPC, GCC). Bài dự thi NeoRAG Cup 2026: 88.03 điểm Private Test, 86.17 điểm Public Test.">
   <meta property="og:title" content="NeoRAG · Hỏi đáp cộng đồng S2B">
-  <meta property="og:description" content="Hybrid retrieval + reranker + Haiku. Public Test 86.17 (baseline 52.40). Chatbot có nguồn trích dẫn, hiểu câu hỏi nối tiếp, từ chối khi không có thông tin.">
+  <meta property="og:description" content="Hybrid retrieval + reranker + Haiku. Private Test 88.03, Public Test 86.17 (baseline 52.40). Chatbot có nguồn trích dẫn, hiểu câu hỏi nối tiếp, từ chối khi không có thông tin.">
   <meta property="og:image" content="site/img/followup.webp">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -291,13 +291,13 @@
     <section id="ket-qua">
       <div class="wrap">
         <div class="kicker">01 · KẾT QUẢ</div>
-        <h2>86.17 điểm Public Test, baseline 52.40</h2>
+        <h2>88.03 điểm Private Test · 86.17 điểm Public Test (baseline 52.40)</h2>
         <p class="sub">Chấm bằng bộ chấm chính thức của BTC: một nửa điểm cho truy xuất (Recall@5, MRR@5, NDCG@5), một nửa cho câu trả lời (String Presence, ROUGE-L, Groundedness, Relevancy, Noise Sensitivity, Abstention).</p>
 
         <div class="stats">
-          <div class="stat hl"><div class="v">86.17</div><div class="l">Điểm Public Test</div></div>
-          <div class="stat"><div class="v">88.55</div><div class="l">Retrieval (Public)</div></div>
-          <div class="stat"><div class="v">83.80</div><div class="l">Generation (Public)</div></div>
+          <div class="stat hl"><div class="v">88.03</div><div class="l">Điểm Private Test</div></div>
+          <div class="stat"><div class="v">93.40</div><div class="l">Retrieval (Private)</div></div>
+          <div class="stat"><div class="v">82.65</div><div class="l">Generation (Private)</div></div>
           <div class="stat"><div class="v">100%</div><div class="l">Từ chối đúng câu không có đáp án</div></div>
         </div>
 
@@ -309,7 +309,8 @@
               <div class="bar-row base"><span class="name">Baseline BTC</span><span class="track"><span class="fill" style="--w:52.4%"></span></span><span class="num">52.40</span></div>
               <div class="bar-row"><span class="name"><b>#1</b> Retrieval tối ưu</span><span class="track"><span class="fill" style="--w:77.99%"></span></span><span class="num">77.99</span></div>
               <div class="bar-row"><span class="name"><b>#2</b> + prompt v2</span><span class="track"><span class="fill" style="--w:80.1%"></span></span><span class="num">80.10</span></div>
-              <div class="bar-row final"><span class="name"><b>#3</b> + rerank câu hỏi con</span><span class="track"><span class="fill" style="--w:86.17%"></span></span><span class="num">86.17</span></div>
+              <div class="bar-row"><span class="name"><b>#3</b> + rerank câu hỏi con (Public)</span><span class="track"><span class="fill" style="--w:86.17%"></span></span><span class="num">86.17</span></div>
+              <div class="bar-row final"><span class="name"><b>Private #3</b> + ưu tiên nhiệm kỳ/giải thưởng</span><span class="track"><span class="fill" style="--w:88.03%"></span></span><span class="num">88.03</span></div>
             </div>
           </div>
           <div class="card">
