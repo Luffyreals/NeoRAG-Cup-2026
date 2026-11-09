@@ -35,7 +35,11 @@ from neorag.data import load_corpus
 from neorag.pipelines import load_pipeline
 from neorag.pipelines.followup import condense_question, needs_context
 from neorag.pipelines.retrieval import ScoredDoc
-from suggestions import SUGGESTIONS  # app/suggestions.py (chạy bằng `python app/server.py`)
+
+try:
+    from suggestions import SUGGESTIONS  # app/suggestions.py (chạy bằng `python app/server.py`)
+except ImportError:
+    from app.suggestions import SUGGESTIONS
 
 PIPELINE = os.getenv("NEORAG_PIPELINE", "neorag.pipelines.my_pipeline:MyPipeline")
 # Như app/chat.py: không để NEORAG_PIPELINE_CONFIG còn sót từ thí nghiệm làm chatbot chạy sai cấu hình.

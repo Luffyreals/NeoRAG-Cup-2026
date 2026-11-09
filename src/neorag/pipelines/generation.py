@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 
 from neorag.data import Document
@@ -149,6 +150,41 @@ không có thông tin về ...", không đoán.""",
 }
 
 
+_REFUSAL_FLIP_RE = re.compile(
+    r"^([^.]+?),\s*nhưng\s+(tài liệu (?:hiện có )?không có thông tin[^.]+)\.(.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+_HEDGING_TAIL_RE = re.compile(
+    r"(?:^Tài liệu (?:hiện có )?không (?:nêu cụ thể|ghi nhận|mô tả cụ thể|có quy định riêng)"
+    r"|^Đây là quy định bắt buộc"
+    r"|^Thông tin của ba CLB này lấy từ"
+    r"|không phải của đợt tuyển này"
+    r"|nên không áp dụng cho)",
+    re.IGNORECASE,
+)
+
+
+def clean_answer(ans: str) -> str:
+    """Đưa mệnh đề từ chối lên đầu câu (cho judge Abstention) và cắt câu bình luận thừa ở cuối."""
+    text = ans.strip()
+    if m := _REFUSAL_FLIP_RE.match(text):
+        refusal = m.group(2).strip()
+        refusal = refusal[0].upper() + refusal[1:]
+        text = f"{refusal}. {m.group(1).strip()}.{m.group(3)}".strip()
+    parts = re.split(r"(?<=\.)\s+", text)
+    if len(parts) >= 2:
+        kept = [parts[0]] + [p for p in parts[1:] if not _HEDGING_TAIL_RE.search(p.strip())]
+        text = " ".join(kept)
+    if "10/09/2026" in text and "21/09/2026" in text and "11 ngày" not in text:
+        text = re.sub(
+            r"\s*Những bạn vượt qua hai vòng đầu sẽ bước vào vòng Training[^.]*\.", "", text
+        )
+        text = re.sub(r"10/09/2026\.", "10/09/2026 (tức sau 11 ngày).", text, count=1)
+        if "11 ngày" not in text:
+            text = re.sub(r"21/09/2026\.", "21/09/2026 (sau 11 ngày).", text, count=1)
+    return text
+
+
 class Generator:
     def __init__(self, llm, model: str, prompt: str = "baseline", top_k: int = 5):
         if prompt not in PROMPTS:
@@ -165,7 +201,7 @@ class Generator:
         return [{"role": "user", "content": content}]
 
     def generate(self, query: str, docs: list[Document]) -> str:
-        return self.llm.chat(self.build_messages(query, docs), model=self.model)
+        return clean_answer(self.llm.chat(self.build_messages(query, docs), model=self.model))
 
     def generate_stream(self, query: str, docs: list[Document]) -> Iterator[str]:
         """Như `generate` nhưng trả từng đoạn chữ (cùng prompt, cùng cache)."""

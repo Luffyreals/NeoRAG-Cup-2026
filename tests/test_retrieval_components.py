@@ -2,7 +2,16 @@ import pytest
 
 from conftest import FakeEmbedder, FakeLLM
 from neorag.data import Document
-from neorag.pipelines.clubs import GCC, MULTIMEDIA, PROPTIT, S2B, boost_clubs, detect_clubs
+from neorag.pipelines.clubs import (
+    GCC,
+    MULTIMEDIA,
+    PROPTIT,
+    S2B,
+    boost_clubs,
+    detect_clubs,
+    filter_rewrites,
+)
+from neorag.pipelines.generation import clean_answer
 from neorag.pipelines.my_pipeline import RETRIEVAL_ONLY_ANSWER, MyPipeline, PipelineConfig
 from neorag.pipelines.rerank import CrossEncoderReranker, fuse_scores
 from neorag.pipelines.retrieval import (
@@ -122,7 +131,27 @@ def test_detect_clubs_aliases_and_unaccented():
     assert detect_clubs("Câu lạc bộ Lập Trình có gì?") == {PROPTIT}
     assert detect_clubs("mpc với gcc khác gì nhau") == {MULTIMEDIA, GCC}
     assert detect_clubs("Nhà sáng tạo Game", "S2B là gì") == {GCC, S2B}
+    assert detect_clubs("clb mm va clb dpt") == {MULTIMEDIA}
     assert detect_clubs("học lập trình game ở đâu") == set()  # "lập trình" chung chung
+
+
+def test_filter_rewrites_fixes_mm_and_drops_hallucinated_clubs():
+    assert filter_rewrites("mm gia han nhan don", ["Mình gia hạn nhận đơn?"]) == [
+        "CLB Multimedia PTIT (MPC) gia hạn nhận đơn?"
+    ]
+    assert filter_rewrites(
+        "clb mm hop ban nao",
+        ["CLB Multimedia PTIT hợp ban nào?", "CLB Lập Trình PTIT có ban nào?"],
+    ) == ["CLB Multimedia PTIT hợp ban nào?"]
+
+
+def test_clean_answer_flips_refusal_and_strips_hedging_tail():
+    raw = "ProPTIT có 3 bài hát, nhưng tài liệu hiện có không có thông tin về tên bài hát."
+    assert clean_answer(raw).startswith("Tài liệu hiện có không có thông tin")
+    tail = "Khẩu hiệu là X. Slogan X là khẩu hiệu chung, không phải của đợt tuyển này."
+    assert clean_answer(tail) == "Khẩu hiệu là X."
+    date_ans = "Mở đến 10/09/2026. Tổng kết ngày 21/09/2026."
+    assert "11 ngày" in clean_answer(date_ans)
 
 
 def test_boost_clubs_is_soft(club_corpus):

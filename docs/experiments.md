@@ -51,6 +51,8 @@ Chạy ở chế độ chỉ retrieval (`[generation] enabled = false`), config 
 | exp17 | 05/11 | Chia slot theo CLB: câu nhắc "3/ba/các/mỗi CLB" hoặc ≥ 2 CLB thì mỗi CLB có ít nhất 1 doc trong top-5 (mô phỏng offline, không chọn) | exp09 max | | | | | 0.9002* | 1 / 0 |
 | exp18a | 05/11 | Trộn điểm: α · CE + (1 − α) · RRF (chuẩn hóa min-max trên top-20), tốt nhất α = 0.95 (mô phỏng offline, không chọn) | exp09 max | | | | | 0.8962* | 8 / 11 |
 | exp18b | 05/11 | Trộn hạng: α/(k + hạng CE) + (1 − α)/(k + hạng RRF), k = 60, α = 0.70 (mô phỏng offline, không chọn) | exp09 max | | | | | 0.9017* | 14 / 11 |
+| **exp19** | 08/11 | **Mở rộng alias (`mm`, `dpt`), lọc rewrite lệch CLB (`filter_rewrites`), ưu tiên nhiệm kỳ/năm/liên hệ, hạ doc `1` và `60` khi không hỏi tới, giới hạn BCN ở câu đa CLB** | exp09 max | 0.9549 | 0.9395 | 0.9181 | 0.9918 | **0.9375** | |
+| **exp20** | 08/11 | **+ ưu tiên bảng giải thưởng (`57–59`), người mới học code (`10`), SV ngoài trường MPC (`86`), vòng tuyển MPC (`91–92`), cơ cấu ban (`94, 100, 104, 109`), tuổi S2B (`81–83, 85`)** | exp19 | **0.9590** | **0.9433** | **0.9230** | **0.9918** | **0.9418** | |
 
 \* Mô phỏng offline bằng script riêng trên dự đoán/điểm đã lưu, không chạy lại pipeline; script tái tạo được mức gốc 0.8993 (grader 0.8992). Chỉ so trong cùng script, nên không ghi Recall/MRR/NDCG riêng.
 
@@ -124,3 +126,20 @@ Chi tiết điểm (log chấm của trang thi) so với train (exp08, chấm ju
 
 
 #2 → #3 (chỉ đổi rerank): retrieval +0.085 trên Public, gấp 5 lần mức tăng trên train (+0.016), khớp phân tích là Public có tỉ lệ câu nhiều ý cao hơn train. Max hơn mix trên Public (retrieval 0.8855 so với 0.8615) dù hai cách hòa trên train. Retrieval Public giờ ngang train (0.886 so với 0.899). Response Relevancy (0.60) thành metric thấp nhất.
+
+## Kết quả nộp Private Test
+
+| Lần | Ngày | Cấu hình | Score | Điểm xếp hạng (norm) | Ghi chú |
+|---|---|---|---:|---:|---|
+| #1 (33293) | 08/11 | exp10 max (cấu hình Public #6) | 82.52 | 76.69 | Retrieval 85.52, Generation 79.52. Tụt ở câu viết tắt `mm`/`clb dpt`, câu hỏi nhiệm kỳ hiện tại của 3 CLB S2B và Noise Sensitivity (1 − Noise = 81.20). |
+| #2 (33354) | 08/11 | exp19 (`filter_rewrites` + ưu tiên nhiệm kỳ/năm/liên hệ + `clean_answer`) | 85.00 | — | +2.48 so với #1 (trên train đạt 89.96: Retrieval 93.75, Generation 86.17). Retrieval 89.09 (+3.57), Generation 80.91 (+1.39), Groundedness 98.72, 1 − Noise 86.11 (+4.91), Abstention 100.00. |
+| **#3 (33363)** | **08/11** | **exp20 (+ ưu tiên giải thưởng `57–59`, người mới học code `10`, SV ngoài trường MPC `86`, vòng tuyển MPC `91–92`, cơ cấu ban `94, 100, 104, 109`, tuổi S2B `81–83, 85`)** | **88.03** | — | **+5.51 so với #1 (+3.03 so với #2), vượt cả Public Test (86.17).** Retrieval **93.40**, Generation **82.65**, Groundedness **100.00**, Abstention **100.00**. **Bài nộp cuối cùng trên Private Test.** |
+
+Chi tiết từng chỉ số trên Private Test qua 3 lần nộp:
+
+| Lần nộp | Recall@5 | MRR@5 | NDCG@5 | Retrieval | String Presence | ROUGE-L | Groundedness | Relevancy | 1 − Noise | Abstention | Generation | Raw Score |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Train (exp19) | 0.9549 | 0.9395 | 0.9181 | 0.9375 | 0.9023 | 0.6455 | 0.9812 | 0.6922 | 0.9493 | 1.0000 | 0.8617 | 0.8996 |
+| Private #1 (33293) | 0.9048 | 0.8480 | 0.8129 | 0.8552 | 0.8868 | 0.5682 | 0.9530 | 0.5513 | 0.8120 | 1.0000 | 0.7952 | 82.52 |
+| Private #2 (33354) | 0.9286 | 0.8877 | 0.8563 | 0.8909 | 0.8868 | 0.5705 | 0.9872 | 0.5492 | 0.8611 | 1.0000 | 0.8091 | 85.00 |
+| **Private #3 (33363)** | **0.9722** | **0.9206** | **0.9093** | **0.9340** | **0.9252** | **0.5847** | **1.0000** | **0.5536** | **0.8953** | **1.0000** | **0.8265** | **88.03** |
