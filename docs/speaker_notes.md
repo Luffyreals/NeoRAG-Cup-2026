@@ -91,7 +91,7 @@ Tài liệu hướng dẫn thuyết trình 15–20 phút dành cho buổi bảo 
 
 ### Slide 14: Demo & Hỏi Đáp
 * Trình diễn trực tiếp chatbot đang chạy tại cổng 8000 (FastAPI).
-* Mời Thầy Cô và các bạn đặt câu hỏi hoặc thử nghiệm trực tiếp các câu hỏi phức tạp.
+* Mời anh chị và các bạn đặt câu hỏi hoặc thử nghiệm trực tiếp các câu hỏi phức tạp.
 
 ### Slide 15: Lời Cảm Ơn (Thank You)
-* Lời cảm ơn Thầy Cô, Ban Giám Khảo và các bạn đã chú ý theo dõi bài thuyết trình.
+* Lời cảm ơn anh chị và các bạn đã lắng nghe bài thuyết trình.
