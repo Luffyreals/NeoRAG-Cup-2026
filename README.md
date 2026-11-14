@@ -8,8 +8,7 @@
 
 Bài dự thi **NeoRAG Cup 2026**: hệ thống RAG trả lời câu hỏi tiếng Việt về cộng đồng S2B (CLB Lập Trình PTIT, CLB Multimedia PTIT, CLB Nhà Sáng Tạo Game PTIT). Hệ thống chỉ dựa trên 118 tài liệu của cuộc thi. Mỗi câu trả lời đều kèm nguồn, và khi tài liệu không có thông tin thì hệ thống từ chối trả lời.
 
-**Trang giới thiệu:** https://luffyreals.github.io/NeoRAG-Cup-2026/  
-**Slide thuyết trình:** [docs/presentation.html](docs/presentation.html) (Mở trực tiếp trên trình duyệt, phím `F` toàn màn hình) · [Kịch bản chi tiết](docs/speaker_notes.md)
+**Trang giới thiệu:** https://luffyreals.github.io/NeoRAG-Cup-2026/
 
 Repo gồm hai phần:
 
@@ -134,7 +133,6 @@ tests/
 | Tài liệu | Nội dung |
 |---|---|
 | [Slide báo cáo](docs/presentation.html) | Bản thuyết trình 15 slide 16:9 widescreen tương tác, hiệu ứng kinetic |
-| [Kịch bản thuyết trình](docs/speaker_notes.md) | Phân bổ thời gian 15–20 phút, lời dẫn gợi ý chi tiết từng slide |
 | [Bảng thí nghiệm](docs/experiments.md) | Ablation từng bước, kết quả các lần nộp Public |
 | [Phân tích lỗi](docs/error_analysis.md) | Lỗi của baseline trên train, điểm xuất phát cho các cải tiến |
 | [Kịch bản demo](docs/demo.md) | Chạy chatbot, checklist trước pitching, xử lý sự cố |
